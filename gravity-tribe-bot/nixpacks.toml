@@ -1,6 +1,14 @@
 [project]
 project-type = "python"
 
+[project.providers]
+python = {}
+
+[phases.install]
+commands = [
+  "pip install -r requirements.txt"
+]
+
 [phases.start]
 commands = [
   "python bot.py"
