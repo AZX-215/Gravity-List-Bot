@@ -1,0 +1,7 @@
+[project]
+project-type = "python"
+
+[phases.start]
+commands = [
+  "python bot.py"
+]
