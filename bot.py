@@ -1,15 +1,12 @@
+import os
 import discord
 from discord import app_commands
 from discord.ext import commands
-import json
 from tribe_manager import TribeManager
 
-# Load config
-with open('config.json') as f:
-    config = json.load(f)
-
-TOKEN = config['token']
-ALLOWED_ROLE_IDS = config['allowed_role_ids']
+# Load from environment variables
+TOKEN = os.getenv('DISCORD_TOKEN')
+ALLOWED_ROLE_IDS = [int(x) for x in os.getenv('ALLOWED_ROLE_IDS', '').split(',') if x]
 
 # Setup bot
 intents = discord.Intents.default()
