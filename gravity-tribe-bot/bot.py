@@ -17,7 +17,7 @@ intents.guild_messages = True
 bot = commands.Bot(command_prefix='!', intents=intents)
 tribe_manager = TribeManager()
 
-# Category data mapping
+# Mapping categories to emojis and diff prefixes
 CATEGORY_DATA = {
     'friend': {'emoji': '🟢', 'prefix': '+'},
     'enemy':  {'emoji': '🔴', 'prefix': '-'},
@@ -56,14 +56,19 @@ async def update_view_message(channel: discord.TextChannel):
 @bot.event
 async def on_ready():
     print(f"Logged in as {bot.user} (ID: {bot.user.id})")
+    # Sync commands to guild for instant availability
+    if TEST_GUILD:
+        await bot.tree.sync(guild=TEST_GUILD)
+        print(f"Slash commands synced to guild {GUILD_ID}")
+    else:
+        await bot.tree.sync()
+        print("Slash commands synced globally (may take up to 1 hour)")
 
-# Slash commands (guild-specific for instant registration)
-
+# Slash commands with guild scoping
 @bot.tree.command(guild=TEST_GUILD, name='create_list', description='Create tribe list for this channel')
 async def create_list(interaction: discord.Interaction):
     if not has_allowed_role(interaction):
-        await interaction.response.send_message("No permission.", ephemeral=True)
-        return
+        return await interaction.response.send_message("No permission.", ephemeral=True)
     tribe_manager.create_list(interaction.channel_id, interaction.channel.name)
     await interaction.response.send_message("✅ Created list.", ephemeral=True)
 
@@ -71,11 +76,9 @@ async def create_list(interaction: discord.Interaction):
 @app_commands.describe(name='Name to add')
 async def add_name(interaction: discord.Interaction, name: str):
     if not has_allowed_role(interaction):
-        await interaction.response.send_message("No permission.", ephemeral=True)
-        return
+        return await interaction.response.send_message("No permission.", ephemeral=True)
     if not tribe_manager.list_exists(interaction.channel_id, interaction.channel.name):
-        await interaction.response.send_message("No list. Use /create_list", ephemeral=True)
-        return
+        return await interaction.response.send_message("No list. Use /create_list", ephemeral=True)
     tribe_manager.add_name(interaction.channel_id, interaction.channel.name, name)
     await update_view_message(interaction.channel)
     await interaction.response.send_message(f"✅ Added `{name}`.", ephemeral=True)
@@ -84,8 +87,7 @@ async def add_name(interaction: discord.Interaction, name: str):
 @app_commands.describe(old_name='Existing name', new_name='New name')
 async def edit_name(interaction: discord.Interaction, old_name: str, new_name: str):
     if not has_allowed_role(interaction):
-        await interaction.response.send_message("No permission.", ephemeral=True)
-        return
+        return await interaction.response.send_message("No permission.", ephemeral=True)
     tribe_manager.edit_name(interaction.channel_id, interaction.channel.name, old_name, new_name)
     await update_view_message(interaction.channel)
     await interaction.response.send_message(f"✏️ `{old_name}` -> `{new_name}`.", ephemeral=True)
@@ -94,8 +96,7 @@ async def edit_name(interaction: discord.Interaction, old_name: str, new_name: s
 @app_commands.describe(name='Name to remove')
 async def remove_name(interaction: discord.Interaction, name: str):
     if not has_allowed_role(interaction):
-        await interaction.response.send_message("No permission.", ephemeral=True)
-        return
+        return await interaction.response.send_message("No permission.", ephemeral=True)
     tribe_manager.remove_name(interaction.channel_id, interaction.channel.name, name)
     await update_view_message(interaction.channel)
     await interaction.response.send_message(f"❌ Removed `{name}`.", ephemeral=True)
@@ -104,8 +105,7 @@ async def remove_name(interaction: discord.Interaction, name: str):
 @app_commands.describe(name='Name to toggle strikethrough')
 async def strike_name(interaction: discord.Interaction, name: str):
     if not has_allowed_role(interaction):
-        await interaction.response.send_message("No permission.", ephemeral=True)
-        return
+        return await interaction.response.send_message("No permission.", ephemeral=True)
     tribe_manager.strike_name(interaction.channel_id, interaction.channel.name, name)
     await update_view_message(interaction.channel)
     await interaction.response.send_message(f"✅ Toggled strikethrough for `{name}`.", ephemeral=True)
@@ -120,8 +120,7 @@ async def strike_name(interaction: discord.Interaction, name: str):
 ])
 async def categorize_name(interaction: discord.Interaction, name: str, category: str):
     if not has_allowed_role(interaction):
-        await interaction.response.send_message("No permission.", ephemeral=True)
-        return
+        return await interaction.response.send_message("No permission.", ephemeral=True)
     tribe_manager.categorize_name(interaction.channel_id, interaction.channel.name, name, category)
     await update_view_message(interaction.channel)
     await interaction.response.send_message(f"🏷️ `{name}` set to **{category}**.", ephemeral=True)
@@ -129,16 +128,14 @@ async def categorize_name(interaction: discord.Interaction, name: str, category:
 @bot.tree.command(guild=TEST_GUILD, name='view_list', description='View the list')
 async def view_list(interaction: discord.Interaction):
     if not tribe_manager.list_exists(interaction.channel_id, interaction.channel.name):
-        await interaction.response.send_message("No list. Use /create_list", ephemeral=True)
-        return
+        return await interaction.response.send_message("No list. Use /create_list", ephemeral=True)
     await update_view_message(interaction.channel)
     await interaction.response.send_message("✅ List displayed.", ephemeral=True)
 
 @bot.tree.command(guild=TEST_GUILD, name='delete_list', description='Delete the list')
 async def delete_list(interaction: discord.Interaction):
     if not has_allowed_role(interaction):
-        await interaction.response.send_message("No permission.", ephemeral=True)
-        return
+        return await interaction.response.send_message("No permission.", ephemeral=True)
     tribe_manager.delete_list(interaction.channel_id, interaction.channel.name)
     await interaction.response.send_message("🗑️ List deleted.", ephemeral=True)
 
