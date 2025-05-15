@@ -29,7 +29,15 @@ class TribeManager:
         path = self._get_filepath(channel_id, channel_name)
         if os.path.exists(path):
             with open(path, 'r') as f:
-                return json.load(f)
+                data = json.load(f)
+                # Ensure data has correct structure
+                if not isinstance(data, dict):
+                    data = {"items": [], "view_message_id": None}
+                else:
+                    data.setdefault("items", [])
+                    data.setdefault("view_message_id", None)
+                return data
+        # Default structure
         return {"items": [], "view_message_id": None}
 
     def save(self, channel_id, channel_name, data):
@@ -39,12 +47,14 @@ class TribeManager:
 
     def add_name(self, channel_id, channel_name, name):
         data = self.load(channel_id, channel_name)
-        data["items"].append({"name": name, "category": None, "struck": False})
+        # Ensure list
+        items = data.setdefault("items", [])
+        items.append({"name": name, "category": None, "struck": False})
         self.save(channel_id, channel_name, data)
 
     def edit_name(self, channel_id, channel_name, old_name, new_name):
         data = self.load(channel_id, channel_name)
-        for item in data["items"]:
+        for item in data.get("items", []):
             if item["name"] == old_name:
                 item["name"] = new_name
                 break
@@ -52,7 +62,7 @@ class TribeManager:
 
     def strike_name(self, channel_id, channel_name, name):
         data = self.load(channel_id, channel_name)
-        for item in data["items"]:
+        for item in data.get("items", []):
             if item["name"] == name:
                 item["struck"] = not item["struck"]
                 break
@@ -60,7 +70,7 @@ class TribeManager:
 
     def categorize_name(self, channel_id, channel_name, name, category):
         data = self.load(channel_id, channel_name)
-        for item in data["items"]:
+        for item in data.get("items", []):
             if item["name"] == name:
                 item["category"] = category
                 break
@@ -68,7 +78,8 @@ class TribeManager:
 
     def remove_name(self, channel_id, channel_name, name):
         data = self.load(channel_id, channel_name)
-        data["items"] = [item for item in data["items"] if item["name"] != name]
+        items = data.get("items", [])
+        data["items"] = [item for item in items if item["name"] != name]
         self.save(channel_id, channel_name, data)
 
     def get_items(self, channel_id, channel_name):
