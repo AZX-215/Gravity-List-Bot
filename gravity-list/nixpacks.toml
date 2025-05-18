@@ -1,9 +1,11 @@
-# nixpacks.toml
+# gravity-list/nixpacks.toml
 
-# Setup phase: install Python dependencies before any build or start
-[phases.setup]
-commands = ["pip install -r requirements.txt"]
+[phases.install]
+# Use python -m pip so that we’re installing into the venv Nixpacks set up
+commands = [
+  "python -m pip install --upgrade pip",
+  "python -m pip install -r requirements.txt"
+]
 
-# Start phase: launch the bot
 [phases.start]
 commands = ["python bot.py"]
