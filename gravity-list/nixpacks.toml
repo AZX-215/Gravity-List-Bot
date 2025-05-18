@@ -1,7 +1,7 @@
 # nixpacks.toml
 
-# Build phase: install Python dependencies
-[phases.build]
+# Setup phase: install Python dependencies before any build or start
+[phases.setup]
 commands = ["pip install -r requirements.txt"]
 
 # Start phase: launch the bot
