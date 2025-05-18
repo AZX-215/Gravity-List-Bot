@@ -14,11 +14,13 @@ DATA_PATH = os.getenv('DATABASE_PATH', 'lists/data.json')
 intents = discord.Intents.default()
 intents.guilds = True
 
-bot = commands.Bot(intents=intents, application_id=CLIENT_ID)
+# Provide a dummy prefix for commands.Bot even if not used
+bot = commands.Bot(command_prefix='!', intents=intents, application_id=CLIENT_ID)
 data = DataManager(DATA_PATH)
 
 @bot.event
 async def on_ready():
+    # Sync commands globally
     await bot.tree.sync()
     print(f'Logged in as {bot.user} (ID: {bot.user.id})')
 
@@ -33,11 +35,11 @@ async def slash_create_list(interaction: discord.Interaction, name: str):
     guild_id = str(interaction.guild.id)
     if not data.initialize_guild(guild_id):
         return await interaction.response.send_message('List already exists or bot not initialized.', ephemeral=True)
-    data.db[guild_id]['lists'][name] = []
+    # Ensure 'lists' structure exists
+    data.db[guild_id].setdefault('lists', {})[name] = []
     data._save()
     await interaction.response.send_message(f'✅ Created list **{name}**.', ephemeral=False)
 
-# Public commands
 @bot.tree.command(name='add', description='Add an entry to a list')
 @app_commands.describe(list_name='List to add to', entry='Entry to add')
 async def slash_add(interaction: discord.Interaction, list_name: str, entry: str):
@@ -59,7 +61,8 @@ async def slash_list(interaction: discord.Interaction, list_name: str):
         return await interaction.response.send_message('Please run /create_list first.', ephemeral=True)
     entries = data.db[guild_id].get('lists', {}).get(list_name, [])
     if entries:
-        await interaction.response.send_message('\n'.join(f'- {e}' for e in entries))
+        formatted = '\n'.join(f'- {e}' for e in entries)
+        await interaction.response.send_message(formatted)
     else:
         await interaction.response.send_message(f'No entries in **{list_name}**.', ephemeral=True)
 
