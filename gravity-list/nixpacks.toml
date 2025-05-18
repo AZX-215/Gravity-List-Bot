@@ -1,9 +1,9 @@
-[phases.install]
-commands = [
-  "echo \"Contents of /app:\" && ls -R /app",
-  "echo \"Installing: $(cat requirements.txt)\"",
-  "pip install -r requirements.txt"
-]
+# nixpacks.toml
 
+# Build phase: install Python dependencies
+[phases.build]
+commands = ["pip install -r requirements.txt"]
+
+# Start phase: launch the bot
 [phases.start]
 commands = ["python bot.py"]
