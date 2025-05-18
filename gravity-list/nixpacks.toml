@@ -1,0 +1,7 @@
+# nixpacks.toml
+
+[phases.install]
+commands = ["pip install -r requirements.txt"]
+
+[phases.start]
+commands = ["python bot.py"]
