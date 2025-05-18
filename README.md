@@ -2,6 +2,18 @@
 
 Introducing a streamlined Discord bot designed for effortless creation and management of categorized lists across multiple channels, featuring customizable, visually enhanced text boxes.
 
+## Getting Started -->
+
+## Environment
+
+1. Copy `.env.example` → `.env` and fill in your values.
+2. `pip install -r requirements.txt`
+3. `python bot.py`
+
+## Deploying
+
+On Railway, set the same variables under Settings → Variables, enable Persistent Volume for `lists/` (if you want data to stick), then redeploy.
+
 ## Data Storage
 
 On first run, the bot creates a local file `data.json` in the project root.
