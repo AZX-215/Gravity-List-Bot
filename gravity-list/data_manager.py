@@ -38,10 +38,29 @@ class DataManager:
         self._save()
         return True
 
+    def delete_list(self, guild_id, list_name):
+        guild = self.db.get(guild_id, {})
+        lists = guild.get('lists', {})
+        if list_name in lists:
+            del lists[list_name]
+            self._save()
+            return True
+        return False
+
     def add_entry(self, guild_id, list_name, entry, category):
         list_obj = self.db[guild_id]['lists'][list_name]
         list_obj['entries'].append({'entry': entry, 'category': category})
         self._save()
+
+    def edit_entry(self, guild_id, list_name, old_entry, new_entry, new_category):
+        list_obj = self.db[guild_id]['lists'][list_name]
+        for e in list_obj['entries']:
+            if e['entry'] == old_entry:
+                e['entry'] = new_entry
+                e['category'] = new_category
+                self._save()
+                return True
+        return False
 
     def get_list(self, guild_id, list_name):
         return self.db[guild_id]['lists'].get(list_name)
