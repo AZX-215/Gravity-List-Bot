@@ -1,16 +1,9 @@
 # nixpacks.toml
 
-# Install dependencies using venv's pip
-[phases.install]
-commands = [
-  "python -m pip install --upgrade pip",
-  "python -m pip install -r requirements.txt"
-]
+# Setup phase: install Python dependencies before any build or start
+[phases.setup]
+commands = ["pip install -r requirements.txt"]
 
-# No build steps needed
-[phases.build]
-commands = []
-
-# Start the bot
+# Start phase: launch the bot
 [phases.start]
 commands = ["python bot.py"]
