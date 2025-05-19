@@ -1,15 +1,21 @@
 import os
 import json
 
-DATA_DIR = "lists"
+# Read storage path from environment, default to './lists/data.json'
+DATABASE_PATH = os.getenv("DATABASE_PATH", "./lists/data.json")
 
 def _ensure_data_dir():
-    if not os.path.exists(DATA_DIR):
-        os.makedirs(DATA_DIR)
+    # Ensure the containing directory exists
+    dir_path = os.path.dirname(DATABASE_PATH)
+    if dir_path and not os.path.exists(dir_path):
+        os.makedirs(dir_path, exist_ok=True)
 
 def _get_list_path(list_name):
     _ensure_data_dir()
-    return os.path.join(DATA_DIR, f"{list_name}.json")
+    # Use one JSON file per list
+    base_dir = os.path.dirname(DATABASE_PATH)
+    filename = f"{list_name}.json"
+    return os.path.join(base_dir, filename)
 
 def save_list(list_name, data):
     path = _get_list_path(list_name)
@@ -30,10 +36,10 @@ def add_to_list(list_name, entry, category):
 
 def edit_entry(list_name, old_name, new_name, new_category):
     data = load_list(list_name)
-    for entry in data:
-        if entry["name"].lower() == old_name.lower():
-            entry["name"] = new_name
-            entry["category"] = new_category
+    for item in data:
+        if item["name"].lower() == old_name.lower():
+            item["name"] = new_name
+            item["category"] = new_category
             break
     save_list(list_name, data)
 
