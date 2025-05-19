@@ -1,26 +1,137 @@
-## **Gravity List Bot**
+# Gravity List Bot
 
-Introducing a streamlined Discord bot designed for effortless creation and management of categorized lists across multiple channels, featuring customizable, visually enhanced text boxes.
+**Gravity List Bot** is a public Discord bot that helps server communities track categorized member names (tribes, alliances, friends/enemies) in visually styled static dashboards.
 
-## Getting Started
+---
 
-- **Environment**
+## 📦 Features
 
-1. Copy `.env.example` → `.env` and fill in your values.
-2. `pip install -r requirements.txt`
-3. `python bot.py`
+- Slash command interface for managing lists
+- Categorized entries with emojis & colors:
+  - 🔴 Enemy
+  - 🟢 Friend
+  - 🔵 Ally
+  - 🟡 Bob
+- Auto-updating static embeds (dashboard-style)
+- Interactive category selection via dropdown
+- JSON-backed persistent storage per server
+- Minimal setup, Railway-deployable
 
-- **Deploying**
+---
 
-On Railway, set the same variables under Settings → Variables, enable Persistent Volume for `lists/` (if you want data to stick), then redeploy.
+## ✨ Commands
 
-- **Data Storage**
+| Command | Description |
+|--------|-------------|
+| `/create_list name:<list>` | Create a new list |
+| `/add_name list_name:<list> name:<entry>` | Add entry to list (category is prompted interactively) |
+| `/edit_name list_name:<list> old_name:<old> new_name:<new>` | Rename an entry and update category |
+| `/remove_name list_name:<list> name:<entry>` | Delete a specific entry from a list |
+| `/delete_list list_name:<list>` | Delete the entire list (admin only) |
+| `/list list_name:<list>` | Refresh or display the list's dashboard embed |
+| `/help` | Show full usage help |
 
-On first run, the bot creates a local file `data.json` in the project root.
-– **Local dev**: this file persists across restarts but is excluded from Git.
-– **Railway**: to keep data across deploys, enable a Persistent Volume or switch to a hosted database.
+---
 
-You can override the file path by setting `DATABASE_PATH` in your `.env`.
+## 🛠️ Setup
+
+### 1. Clone the Repo
+
+```bash
+git clone https://github.com/YOUR_USERNAME/Gravity-List-Bot.git
+cd Gravity-List-Bot
+```
+
+### 2. Configure Environment Variables
+
+Create a `.env` file based on the example:
+
+```bash
+cp .env.example .env
+```
+
+Then fill in:
+```
+DISCORD_TOKEN=your_discord_bot_token
+CLIENT_ID=your_discord_app_client_id
+GUILD_ID=your_test_server_id
+DATABASE_PATH=lists/data.json
+```
+
+### 3. Install Dependencies
+
+```bash
+pip install -r requirements.txt
+```
+
+---
+
+## 🚀 Run the Bot (Locally)
+
+```bash
+python bot.py
+```
+
+---
+
+## ☁️ Deploy on Railway
+
+1. Connect the GitHub repo to [Railway](https://railway.app/)
+2. Set the following environment variables:
+   - `DISCORD_TOKEN`
+   - `CLIENT_ID`
+   - `GUILD_ID`
+   - `DATABASE_PATH` (recommended: `lists/data.json`)
+3. Use **Nixpacks** with this `nixpacks.toml`:
+```toml
+[phases.install]
+commands = ["pip install -r requirements.txt"]
+
+[phases.start]
+commands = ["python bot.py"]
+```
+4. Add a **volume** at `/app/lists` for persistent list storage
+5. Trigger deploy
+
+---
+
+## ✅ Permissions & Scope
+
+You must add your bot with the following OAuth2 scopes:
+
+- `applications.commands`
+- `bot`
+
+Minimum bot permissions:
+- Send Messages
+- Embed Links
+- Read Message History
+- Manage Messages (optional, for deleting embeds)
+
+---
+
+## 📚 Example Workflow
+
+1. `/create_list name:Enemies`
+2. `/add_name list_name:Enemies name:TribeX`
+   - Select "Enemy" from the dropdown
+3. `/list list_name:Enemies` – posts the dashboard
+4. `/edit_name list_name:Enemies old_name:TribeX new_name:TribeXYZ`
+   - Reassign a new category
+5. `/remove_name list_name:Enemies name:TribeXYZ`
+6. `/delete_list list_name:Enemies`
+
+---
+
+## 🤝 Contributing
+
+PRs and forks are welcome. If you’d like to add more categories, role-based list controls, or pagination, feel free to submit an issue or fork it.
+
+---
+
+## 📜 License
+
+MIT
 
 ## Legal
 
