@@ -1,19 +1,17 @@
-# Dockerfile (temporary for debugging)
-
+# Dockerfile
 FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install deps
+# Install dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy all code
+# Copy your bot code
 COPY . .
 
-# —— DEBUG: print the first 5 lines of bot.py so we know what’s in here
-RUN echo "---- bot.py preview in container ----" \
- && head -n5 bot.py || true
+# Debug: show the first 5 lines of bot.py
+RUN echo "---- bot.py preview ----" && head -n5 bot.py
 
-# Finally, run the bot
+# Finally start your bot
 CMD ["python", "bot.py"]
