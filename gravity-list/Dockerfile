@@ -1,3 +1,6 @@
+# after COPY . .
+RUN echo "---- bot.py contents: ----" && sed -n '1,5p' bot.py
+
 # Use the official Python slim image
 FROM python:3.11-slim
 
