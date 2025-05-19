@@ -32,19 +32,16 @@ CATEGORY_EMOJIS = {
 
 @bot.event
 async def on_ready():
-    # Clear any existing commands in the guild to prevent duplicates
     guild_obj = discord.Object(id=GUILD_ID)
+    # Clear existing guild commands to avoid duplication
     bot.tree.clear_commands(guild=guild_obj)
-    # Sync commands to the specified guild
+    # Sync commands to guild
     synced = await bot.tree.sync(guild=guild_obj)
     print(f"🔄 Synced {len(synced)} commands to guild {GUILD_ID}")
-    print(f"✅ Logged in as {bot.user}")
+    print(f"✅ Bot is ready as {bot.user}")
 
-@bot.tree.command(
-    name="create_list",
-    description="Create a new list",
-    guild=discord.Object(id=GUILD_ID)
-)
+# Command: create_list
+@bot.tree.command(name="create_list", description="Create a new list", guild=discord.Object(id=GUILD_ID))
 @app_commands.describe(name="Name of the new list")
 async def create_list(interaction: discord.Interaction, name: str):
     if list_exists(name):
@@ -53,11 +50,8 @@ async def create_list(interaction: discord.Interaction, name: str):
         save_list(name, [])
         await interaction.response.send_message(f"✅ List `{name}` created.", ephemeral=True)
 
-@bot.tree.command(
-    name="add_name",
-    description="Add a name to a list",
-    guild=discord.Object(id=GUILD_ID)
-)
+# Command: add_name
+@bot.tree.command(name="add_name", description="Add a name to a list", guild=discord.Object(id=GUILD_ID))
 @app_commands.describe(
     list_name="Which list to add to",
     name="Name to add",
@@ -79,27 +73,18 @@ async def add_name(interaction: discord.Interaction, list_name: str, name: str, 
     )
     await show_list(interaction, list_name)
 
-@bot.tree.command(
-    name="remove_name",
-    description="Remove a name from a list",
-    guild=discord.Object(id=GUILD_ID)
-)
-@app_commands.describe(
-    list_name="Which list",
-    name="Name to remove"
-)
+# Command: remove_name
+@bot.tree.command(name="remove_name", description="Remove a name from a list", guild=discord.Object(id=GUILD_ID))
+@app_commands.describe(list_name="Which list", name="Name to remove")
 async def remove_name(interaction: discord.Interaction, list_name: str, name: str):
     if not list_exists(list_name):
         return await interaction.response.send_message(f"❌ List `{list_name}` not found.", ephemeral=True)
     remove_entry(list_name, name)
-    await interaction.response.send_message(f"🗑️ Removed `{name}` from `{list_name}`.", ephemeral=True)
+    await interaction.response.send_message(f"🗑️ Removed `{name}`.", ephemeral=True)
     await show_list(interaction, list_name)
 
-@bot.tree.command(
-    name="edit_name",
-    description="Edit a name and its category",
-    guild=discord.Object(id=GUILD_ID)
-)
+# Command: edit_name
+@bot.tree.command(name="edit_name", description="Edit a name and its category", guild=discord.Object(id=GUILD_ID))
 @app_commands.describe(
     list_name="Which list",
     old_name="Existing name",
@@ -128,39 +113,30 @@ async def edit_name(
     )
     await show_list(interaction, list_name)
 
-@bot.tree.command(
-    name="delete_list",
-    description="Delete an entire list",
-    guild=discord.Object(id=GUILD_ID)
-)
-@app_commands.describe(name="Name of the list to delete")
+# Command: delete_list
+@bot.tree.command(name="delete_list", description="Delete an entire list", guild=discord.Object(id=GUILD_ID))
+@app_commands.describe(name="Name of the list")
 async def delete_list_cmd(interaction: discord.Interaction, name: str):
     if not list_exists(name):
         return await interaction.response.send_message(f"⚠️ List `{name}` not found.", ephemeral=True)
     delete_list(name)
     await interaction.response.send_message(f"🗑️ Deleted list `{name}`.", ephemeral=True)
 
-@bot.tree.command(
-    name="list",
-    description="Show entries in a list",
-    guild=discord.Object(id=GUILD_ID)
-)
-@app_commands.describe(name="Which list to display")
+# Command: list
+@bot.tree.command(name="list", description="Show entries in a list", guild=discord.Object(id=GUILD_ID))
+@app_commands.describe(name="Which list")
 async def show_list(interaction: discord.Interaction, name: str):
     data = load_list(name)
     if not data:
-        return await interaction.response.send_message(f"📭 List `{name}` is empty or doesn't exist.", ephemeral=True)
+        return await interaction.response.send_message(f"📭 `{name}` is empty or doesn't exist.", ephemeral=True)
     embed = discord.Embed(title=f"{name} List", color=0x808080)
     for item in data:
         emoji = CATEGORY_EMOJIS.get(item["category"], "")
         embed.add_field(name=f"{emoji} {item['name']}", value="‎", inline=False)
     await interaction.response.send_message(embed=embed)
 
-@bot.tree.command(
-    name="help",
-    description="Show usage instructions",
-    guild=discord.Object(id=GUILD_ID)
-)
+# Command: help
+@bot.tree.command(name="help", description="Show usage instructions", guild=discord.Object(id=GUILD_ID))
 async def help_command(interaction: discord.Interaction):
     help_text = (
         "**Gravity List Bot Help**\n\n"
@@ -170,7 +146,7 @@ async def help_command(interaction: discord.Interaction):
         "/edit_name list_name:<list> old_name:<old> new_name:<new> new_category:<cat> – Edit a name\n"
         "/delete_list name:<list> – Delete a list\n"
         "/list name:<list> – Show or refresh dashboard\n"
-        "/help – This message"
+        "/help – This help message"
     )
     await interaction.response.send_message(help_text, ephemeral=True)
 
