@@ -1,15 +1,19 @@
-# Use the official Python slim image
+# Dockerfile (temporary for debugging)
+
 FROM python:3.11-slim
 
-# Set working dir
 WORKDIR /app
 
-# Copy and install dependencies
+# Install deps
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy all your source code
+# Copy all code
 COPY . .
 
-# When the container launches, start your bot
+# —— DEBUG: print the first 5 lines of bot.py so we know what’s in here
+RUN echo "---- bot.py preview in container ----" \
+ && head -n5 bot.py || true
+
+# Finally, run the bot
 CMD ["python", "bot.py"]
