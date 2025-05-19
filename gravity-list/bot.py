@@ -14,9 +14,9 @@ from data_manager import (
 from dotenv import load_dotenv
 
 load_dotenv()
-TOKEN = os.getenv("DISCORD_TOKEN")
+TOKEN     = os.getenv("DISCORD_TOKEN")
 CLIENT_ID = int(os.getenv("CLIENT_ID"))
-GUILD_ID = int(os.getenv("GUILD_ID"))
+GUILD_ID  = int(os.getenv("GUILD_ID"))
 
 intents = discord.Intents.default()
 intents.guilds = True
@@ -32,11 +32,11 @@ CATEGORY_EMOJIS = {
 
 @bot.event
 async def on_ready():
-    # Clear any global commands
-    bot.tree.clear_commands()
+    # Clear any existing commands in the guild to prevent duplicates
+    guild_obj = discord.Object(id=GUILD_ID)
+    bot.tree.clear_commands(guild=guild_obj)
     # Sync commands to the specified guild
-    guild = discord.Object(id=GUILD_ID)
-    synced = await bot.tree.sync(guild=guild)
+    synced = await bot.tree.sync(guild=guild_obj)
     print(f"🔄 Synced {len(synced)} commands to guild {GUILD_ID}")
     print(f"✅ Logged in as {bot.user}")
 
@@ -169,7 +169,7 @@ async def help_command(interaction: discord.Interaction):
         "/remove_name list_name:<list> name:<entry> – Remove a name\n"
         "/edit_name list_name:<list> old_name:<old> new_name:<new> new_category:<cat> – Edit a name\n"
         "/delete_list name:<list> – Delete a list\n"
-        "/list name:<list> – Show or refresh\n"
+        "/list name:<list> – Show or refresh dashboard\n"
         "/help – This message"
     )
     await interaction.response.send_message(help_text, ephemeral=True)
