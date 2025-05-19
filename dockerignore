@@ -1,6 +1,0 @@
-# Ignore files and directories
-lists/
-*.pyc
-__pycache__/
-.env
-.env.example

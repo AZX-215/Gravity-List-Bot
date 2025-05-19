@@ -1,0 +1,14 @@
+# Git metadata
+.git
+.gitignore
+
+# Local-only files
+.env
+.env.*
+
+# Your source data (we’ll generate it at runtime or mount as a volume)
+lists/
+
+# Python cache
+__pycache__/
+*.py[cod]
