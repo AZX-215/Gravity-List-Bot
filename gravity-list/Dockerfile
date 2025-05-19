@@ -1,15 +1,15 @@
-# Use a slim Python image
+# Use the official Python slim image
 FROM python:3.11-slim
 
-# Set working directory
+# Set working dir
 WORKDIR /app
 
-# Copy and install dependencies first
+# Copy and install dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy the rest of the code
+# Copy all your source code
 COPY . .
 
-# Launch the bot
+# When the container launches, start your bot
 CMD ["python", "bot.py"]
