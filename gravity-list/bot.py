@@ -1,4 +1,3 @@
-print("🔧 bot.py has started loading…")
 import os
 import discord
 from discord.ext import commands
@@ -34,7 +33,6 @@ CATEGORY_EMOJIS = {
 @bot.event
 async def on_ready():
     guild_obj = discord.Object(id=GUILD_ID)
-    # Clear and sync only guild-specific commands
     bot.tree.clear_commands(guild=guild_obj)
     synced = await bot.tree.sync(guild=guild_obj)
     print(f"🔄 Synced {len(synced)} commands to guild {GUILD_ID}")
