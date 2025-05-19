@@ -1,0 +1,12 @@
+# Environment files
+.env
+.env.*
+
+# Data files (your lists storage)
+lists/
+# Or more specifically:
+# lists/data.json
+
+# Python cache
+__pycache__/
+*.py[cod]
