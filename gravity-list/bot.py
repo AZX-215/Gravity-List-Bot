@@ -13,16 +13,23 @@ from data_manager import (
 )
 from dotenv import load_dotenv
 
+# Debug print to verify latest code loads
+print("🔧 bot.py has started loading…")
+
+# Load environment variables
 load_dotenv()
 TOKEN     = os.getenv("DISCORD_TOKEN")
 CLIENT_ID = int(os.getenv("CLIENT_ID"))
 GUILD_ID  = int(os.getenv("GUILD_ID"))
 
+# Configure intents
 intents = discord.Intents.default()
 intents.guilds = True
 
+# Initialize bot
 bot = commands.Bot(command_prefix="!", intents=intents, application_id=CLIENT_ID)
 
+# Category definitions
 CATEGORY_EMOJIS = {
     "Enemy":  "🔴",
     "Friend": "🟢",
@@ -32,13 +39,14 @@ CATEGORY_EMOJIS = {
 
 @bot.event
 async def on_ready():
+    # Sync only guild-scoped commands, clearing old ones
     guild_obj = discord.Object(id=GUILD_ID)
     bot.tree.clear_commands(guild=guild_obj)
     synced = await bot.tree.sync(guild=guild_obj)
     print(f"🔄 Synced {len(synced)} commands to guild {GUILD_ID}")
     print(f"✅ Bot is ready as {bot.user}")
 
-# /create_list
+# Command: create_list
 @bot.tree.command(
     name="create_list",
     description="Create a new list",
@@ -52,7 +60,7 @@ async def create_list(interaction: discord.Interaction, name: str):
         save_list(name, [])
         await interaction.response.send_message(f"✅ List `{name}` created.", ephemeral=True)
 
-# /add_name
+# Command: add_name
 @bot.tree.command(
     name="add_name",
     description="Add a name to a list",
@@ -79,7 +87,7 @@ async def add_name(interaction: discord.Interaction, list_name: str, name: str, 
     )
     await show_list(interaction, list_name)
 
-# /remove_name
+# Command: remove_name
 @bot.tree.command(
     name="remove_name",
     description="Remove a name from a list",
@@ -93,7 +101,7 @@ async def remove_name(interaction: discord.Interaction, list_name: str, name: st
     await interaction.response.send_message(f"🗑️ Removed `{name}` from `{list_name}`.", ephemeral=True)
     await show_list(interaction, list_name)
 
-# /edit_name
+# Command: edit_name
 @bot.tree.command(
     name="edit_name",
     description="Edit a name and its category",
@@ -127,7 +135,7 @@ async def edit_name(
     )
     await show_list(interaction, list_name)
 
-# /delete_list
+# Command: delete_list
 @bot.tree.command(
     name="delete_list",
     description="Delete an entire list",
@@ -140,7 +148,7 @@ async def delete_list_cmd(interaction: discord.Interaction, name: str):
     delete_list(name)
     await interaction.response.send_message(f"🗑️ Deleted list `{name}`.", ephemeral=True)
 
-# /list
+# Command: list
 @bot.tree.command(
     name="list",
     description="Show or refresh list dashboard",
@@ -157,7 +165,7 @@ async def show_list(interaction: discord.Interaction, name: str):
         embed.add_field(name=f"{emoji} {item['name']}", value="‎", inline=False)
     await interaction.response.send_message(embed=embed)
 
-# /help
+# Command: help
 @bot.tree.command(
     name="help",
     description="Show help message",
@@ -176,4 +184,5 @@ async def help_command(interaction: discord.Interaction):
     )
     await interaction.response.send_message(help_text, ephemeral=True)
 
+# Run the bot
 bot.run(TOKEN)
