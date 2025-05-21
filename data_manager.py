@@ -12,7 +12,6 @@ def _ensure_data_dir():
 
 def _get_list_path(list_name):
     _ensure_data_dir()
-    # Use one JSON file per list
     base_dir = os.path.dirname(DATABASE_PATH)
     filename = f"{list_name}.json"
     return os.path.join(base_dir, filename)
