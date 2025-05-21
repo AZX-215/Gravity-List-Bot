@@ -80,24 +80,7 @@ python bot.py
    - `DISCORD_TOKEN`
    - `CLIENT_ID`
    - `DATABASE_PATH` (recommended: `lists/data.json`)
-3. ## Deployment on Railway
--We use a standard Dockerfile to build and run the bot.
-
-(1) **Ensure your repo root contains:**
-   - `Dockerfile`
-   - `bot.py`
-   - `data_manager.py`
-   - `requirements.txt`
-   - `.env.example` (with `DISCORD_TOKEN`, `CLIENT_ID`, and optional `DATABASE_PATH`)
-
-(2) **Set up Railway variables**  
-   In your project’s **Settings → Variables**, add:
-   - `DISCORD_TOKEN` – your bot token  
-   - `CLIENT_ID` – your application client ID  
-   - `DATABASE_PATH` – (optional) e.g. `./lists/data.json`
-
-(3) **Deploy**  
-   Railway will detect the `Dockerfile` and run:
+3. Railway will detect the `Dockerfile` and run:
    ```dockerfile
    FROM python:3.11-slim
    WORKDIR /app
