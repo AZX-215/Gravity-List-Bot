@@ -3,15 +3,18 @@ import json
 
 # Read storage path from environment, default to './lists/data.json'
 DATABASE_PATH = os.getenv("DATABASE_PATH", "./lists/data.json")
+# Dashboards file in same directory
+DASHBOARDS_PATH = os.getenv("DASHBOARDS_PATH", None)
+if DASHBOARDS_PATH is None:
+    DASHBOARDS_PATH = os.path.join(os.path.dirname(DATABASE_PATH), "dashboards.json")
 
-def _ensure_data_dir():
-    # Ensure the containing directory exists
-    dir_path = os.path.dirname(DATABASE_PATH)
-    if dir_path and not os.path.exists(dir_path):
-        os.makedirs(dir_path, exist_ok=True)
+def _ensure_dir(path):
+    base_dir = os.path.dirname(path)
+    if base_dir and not os.path.exists(base_dir):
+        os.makedirs(base_dir, exist_ok=True)
 
 def _get_list_path(list_name):
-    _ensure_data_dir()
+    _ensure_dir(DATABASE_PATH)
     base_dir = os.path.dirname(DATABASE_PATH)
     filename = f"{list_name}.json"
     return os.path.join(base_dir, filename)
@@ -54,3 +57,29 @@ def delete_list(list_name):
 
 def list_exists(list_name):
     return os.path.exists(_get_list_path(list_name))
+
+# Dashboard management
+
+def _load_dashboards():
+    _ensure_dir(DASHBOARDS_PATH)
+    if os.path.exists(DASHBOARDS_PATH):
+        with open(DASHBOARDS_PATH, "r") as f:
+            return json.load(f)
+    return {}
+
+def _save_dashboards(data):
+    _ensure_dir(DASHBOARDS_PATH)
+    with open(DASHBOARDS_PATH, "w") as f:
+        json.dump(data, f, indent=2)
+
+def save_dashboard_id(list_name, channel_id, message_id):
+    data = _load_dashboards()
+    data[list_name] = {"channel_id": channel_id, "message_id": message_id}
+    _save_dashboards(data)
+
+def get_dashboard_id(list_name):
+    data = _load_dashboards()
+    dash = data.get(list_name)
+    if dash:
+        return dash["channel_id"], dash["message_id"]
+    return None
