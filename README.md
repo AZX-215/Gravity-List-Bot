@@ -79,18 +79,33 @@ python bot.py
 2. Set the following environment variables:
    - `DISCORD_TOKEN`
    - `CLIENT_ID`
-   - `GUILD_ID`
    - `DATABASE_PATH` (recommended: `lists/data.json`)
-3. Use **Nixpacks** with this `nixpacks.toml`:
-```toml
-[phases.install]
-commands = ["pip install -r requirements.txt"]
+3. ## Deployment on Railway
+-We use a standard Dockerfile to build and run the bot.
 
-[phases.start]
-commands = ["python bot.py"]
-```
-4. Add a **volume** at `/app/lists` for persistent list storage
-5. Trigger deploy
+(1) **Ensure your repo root contains:**
+   - `Dockerfile`
+   - `bot.py`
+   - `data_manager.py`
+   - `requirements.txt`
+   - `.env.example` (with `DISCORD_TOKEN`, `CLIENT_ID`, and optional `DATABASE_PATH`)
+
+(2) **Set up Railway variables**  
+   In your project’s **Settings → Variables**, add:
+   - `DISCORD_TOKEN` – your bot token  
+   - `CLIENT_ID` – your application client ID  
+   - `DATABASE_PATH` – (optional) e.g. `./lists/data.json`
+
+(3) **Deploy**  
+   Railway will detect the `Dockerfile` and run:
+   ```dockerfile
+   FROM python:3.11-slim
+   WORKDIR /app
+   COPY requirements.txt .
+   RUN pip install --no-cache-dir -r requirements.txt
+   COPY . .
+   CMD ["python", "bot.py"]
+
 
 ---
 
