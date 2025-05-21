@@ -10,8 +10,9 @@ REM Activate virtual environment
 call venv\Scripts\activate
 
 REM Upgrade pip and install dependencies
-pip install --upgrade pip
+
 pip install -r requirements.txt
+python.exe -m pip install --upgrade pip
 
 echo.
 echo Setup complete! You can now run run.bat to start the bot.
