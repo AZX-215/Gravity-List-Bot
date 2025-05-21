@@ -1,12 +1,11 @@
-# Environment files
+# Secrets
 .env
 .env.*
 
-# Data files (your lists storage)
+# Data
 lists/
-# Or more specifically:
-# lists/data.json
 
-# Python cache
+# Python
 __pycache__/
 *.py[cod]
+venv/
