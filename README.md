@@ -54,7 +54,6 @@ Then fill in:
 ```
 DISCORD_TOKEN=your_discord_bot_token
 CLIENT_ID=your_discord_app_client_id
-GUILD_ID=your_test_server_id
 DATABASE_PATH=lists/data.json
 ```
 
