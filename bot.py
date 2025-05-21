@@ -13,8 +13,8 @@ from data_manager import (
 )
 from dotenv import load_dotenv
 
-# Debug print to confirm the updated file is running
-print("🔧 Global bot.py is loading…")
+# Debug: confirm this file loads
+print("🔧 Global bot.py v2.1 is loading…")
 
 load_dotenv()
 TOKEN     = os.getenv("DISCORD_TOKEN")
@@ -34,8 +34,7 @@ CATEGORY_EMOJIS = {
 
 @bot.event
 async def on_ready():
-    # Clear and sync globally
-    bot.tree.clear_commands(guild=None)
+    # Sync global commands without clearing
     synced = await bot.tree.sync()
     print(f"🔄 Synced {len(synced)} global commands")
     print(f"✅ Bot is ready as {bot.user}")
@@ -106,20 +105,29 @@ async def show_list(interaction: discord.Interaction, name: str):
         return await interaction.response.send_message(f"📭 `{name}` is empty or doesn't exist.", ephemeral=True)
     embed = discord.Embed(title=f"{name} List", color=0x808080)
     for item in data:
-        emoji = CATEGORY_EMOJIS.get(item["category"], "")
-        embed.add_field(name=f"{emoji} {item['name']}", value="‎", inline=False)
+        emoji = CATEGORY_EMOJIS[item["category"]]
+        # Use simple ASCII space instead of hidden unicode
+        embed.add_field(name=f"{emoji} {item['name']}", value=" ", inline=False)
     await interaction.response.send_message(embed=embed)
 
 @bot.tree.command(name="help", description="Show usage instructions")
 async def help_command(interaction: discord.Interaction):
     help_text = (
-        "**Gravity List Bot Help**\n\n"
-        "/create_list name:<list> – Create a list\n"
-        "/add_name list_name:<list> name:<entry> category:<cat> – Add a name\n"
-        "/remove_name list_name:<list> name:<entry> – Remove a name\n"
-        "/edit_name list_name:<list> old_name:<old> new_name:<new> new_category:<cat> – Edit a name\n"
-        "/delete_list name:<list> – Delete a list\n"
-        "/list name:<list> – Show entries\n"
+        "**Gravity List Bot Help**
+
+"
+        "/create_list name:<list> – Create a list
+"
+        "/add_name list_name:<list> name:<entry> category:<cat> – Add a name
+"
+        "/remove_name list_name:<list> name:<entry> – Remove a name
+"
+        "/edit_name list_name:<list> old_name:<old> new_name:<new> new_category:<cat> – Edit a name
+"
+        "/delete_list name:<list> – Delete a list
+"
+        "/list name:<list> – Show entries
+"
         "/help – Show this help"
     )
     await interaction.response.send_message(help_text, ephemeral=True)
