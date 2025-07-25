@@ -5,7 +5,6 @@ import uuid
 import discord
 from discord.ext import commands, tasks
 from discord import app_commands
-
 from data_manager import load_timers, add_timer, remove_timer
 
 POLL_INTERVAL = 60  # seconds
@@ -75,5 +74,5 @@ class TimerCog(commands.Cog):
                 except (discord.NotFound, discord.Forbidden):
                     pass
 
-def setup(bot: commands.Bot):
-    bot.add_cog(TimerCog(bot))
+async def setup(bot: commands.Bot):
+    await bot.add_cog(TimerCog(bot))

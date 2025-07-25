@@ -21,7 +21,6 @@ def _ensure_dir(path):
         os.makedirs(base_dir, exist_ok=True)
 
 # --- List management ---
-
 def _get_list_path(list_name):
     _ensure_dir(DATABASE_PATH)
     base_dir = os.path.dirname(DATABASE_PATH)
@@ -67,7 +66,6 @@ def list_exists(list_name):
     return os.path.exists(_get_list_path(list_name))
 
 # --- Dashboard management ---
-
 def _load_dashboards():
     _ensure_dir(DASHBOARDS_PATH)
     if os.path.exists(DASHBOARDS_PATH):
@@ -100,7 +98,6 @@ def get_list_hash(list_name):
     return hashlib.md5(data.encode()).hexdigest()
 
 # --- Timer management ---
-
 def load_timers():
     _ensure_dir(TIMERS_PATH)
     if os.path.exists(TIMERS_PATH):
