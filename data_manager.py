@@ -1,5 +1,7 @@
+
 import os
 import json
+import hashlib
 
 # Read storage path from environment, default to './lists/data.json'
 DATABASE_PATH = os.getenv("DATABASE_PATH", "./lists/data.json")
@@ -83,3 +85,14 @@ def get_dashboard_id(list_name):
     if dash:
         return dash["channel_id"], dash["message_id"]
     return None
+
+def get_all_dashboards():
+    _ensure_dir(DASHBOARDS_PATH)
+    if os.path.exists(DASHBOARDS_PATH):
+        with open(DASHBOARDS_PATH, "r") as f:
+            return json.load(f)
+    return {}
+
+def get_list_hash(list_name):
+    data = json.dumps(load_list(list_name), sort_keys=True)
+    return hashlib.md5(data.encode()).hexdigest()
