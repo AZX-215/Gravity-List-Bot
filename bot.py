@@ -10,10 +10,11 @@ from data_manager import (
     delete_list, list_exists, save_dashboard_id, get_dashboard_id,
     get_all_dashboards, get_list_hash
 )
+from timers import setup as setup_timers
 from dotenv import load_dotenv
 import asyncio
 
-print("🔧 bot.py v8 (modular timers fix) loading…")
+print("🔧 bot.py v9 (modular timers fix v2) loading…")
 load_dotenv()
 
 TOKEN     = os.getenv("DISCORD_TOKEN")
@@ -55,7 +56,6 @@ async def update_dashboard(list_name: str, interaction: discord.Interaction):
     except (discord.NotFound, discord.Forbidden):
         return
 
-# Background updater for dashboards
 async def background_updater():
     last_hashes = {}
     await bot.wait_until_ready()
@@ -80,6 +80,8 @@ async def on_ready():
     print(f"🔄 Synced {len(bot.tree.get_commands())} global commands")
     print(f"✅ Bot is ready as {bot.user}")
     bot.loop.create_task(background_updater())
+    # Initialize the timers cog
+    setup_timers(bot)
 
 # ---- List Commands ----
 
@@ -177,8 +179,5 @@ async def help_command(interaction: discord.Interaction):
         "/help\n"
     )
     await interaction.response.send_message(help_text, ephemeral=True)
-
-# Load timers extension (must be in same directory as bot.py)
-bot.load_extension("timers")
 
 bot.run(TOKEN)
