@@ -1,7 +1,5 @@
 
 import os
-import json
-import hashlib
 import discord
 from discord.ext import commands
 from discord import app_commands
@@ -10,11 +8,11 @@ from data_manager import (
     delete_list, list_exists, save_dashboard_id, get_dashboard_id,
     get_all_dashboards, get_list_hash
 )
-from timers import setup as setup_timers
 from dotenv import load_dotenv
 import asyncio
+from timers import setup as setup_timers
 
-print("🔧 bot.py v9 (modular timers fix v2) loading…")
+print("🔧 bot.py v9 (modular timers) loading…")
 load_dotenv()
 
 TOKEN     = os.getenv("DISCORD_TOKEN")
@@ -54,14 +52,13 @@ async def update_dashboard(list_name: str, interaction: discord.Interaction):
         msg = await channel.fetch_message(message_id)
         await msg.edit(embed=build_embed(list_name))
     except (discord.NotFound, discord.Forbidden):
-        return
+        pass
 
 async def background_updater():
     last_hashes = {}
     await bot.wait_until_ready()
     while not bot.is_closed():
-        dashboards = get_all_dashboards()
-        for list_name, dash in dashboards.items():
+        for list_name, dash in get_all_dashboards().items():
             current = get_list_hash(list_name)
             if last_hashes.get(list_name) != current:
                 last_hashes[list_name] = current
@@ -77,14 +74,12 @@ async def background_updater():
 @bot.event
 async def on_ready():
     await bot.tree.sync()
-    print(f"🔄 Synced {len(bot.tree.get_commands())} global commands")
+    print(f"🔄 Synced {len(bot.tree.get_commands())} commands")
     print(f"✅ Bot is ready as {bot.user}")
     bot.loop.create_task(background_updater())
-    # Initialize the timers cog
     setup_timers(bot)
 
-# ---- List Commands ----
-
+# List commands
 @bot.tree.command(name="create_list", description="Create a new list")
 @app_commands.describe(name="Name of the new list")
 async def create_list(interaction: discord.Interaction, name: str):
@@ -162,8 +157,6 @@ async def list_dashboard(interaction: discord.Interaction, name: str):
             await interaction.response.send_message(embed=embed)
             msg = await interaction.original_response()
             save_dashboard_id(name, msg.channel.id, msg.id)
-
-# ---- Help ----
 
 @bot.tree.command(name="help", description="Show usage instructions")
 async def help_command(interaction: discord.Interaction):

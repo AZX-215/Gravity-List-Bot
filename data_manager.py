@@ -9,6 +9,7 @@ DATABASE_PATH = os.getenv("DATABASE_PATH", "./lists/data.json")
 DASHBOARDS_PATH = os.getenv("DASHBOARDS_PATH", None)
 if DASHBOARDS_PATH is None:
     DASHBOARDS_PATH = os.path.join(os.path.dirname(DATABASE_PATH), "dashboards.json")
+
 # Timers file in same directory
 TIMERS_PATH = os.getenv("TIMERS_PATH", None)
 if TIMERS_PATH is None:
@@ -19,13 +20,13 @@ def _ensure_dir(path):
     if base_dir and not os.path.exists(base_dir):
         os.makedirs(base_dir, exist_ok=True)
 
+# --- List management ---
+
 def _get_list_path(list_name):
     _ensure_dir(DATABASE_PATH)
     base_dir = os.path.dirname(DATABASE_PATH)
-    filename = f"{list_name}.json"
-    return os.path.join(base_dir, filename)
+    return os.path.join(base_dir, f"{list_name}.json")
 
-# --- List management ---
 def save_list(list_name, data):
     path = _get_list_path(list_name)
     with open(path, "w") as f:
@@ -66,6 +67,7 @@ def list_exists(list_name):
     return os.path.exists(_get_list_path(list_name))
 
 # --- Dashboard management ---
+
 def _load_dashboards():
     _ensure_dir(DASHBOARDS_PATH)
     if os.path.exists(DASHBOARDS_PATH):
@@ -91,14 +93,14 @@ def get_dashboard_id(list_name):
     return None
 
 def get_all_dashboards():
-    _ensure_dir(DASHBOARDS_PATH)
     return _load_dashboards()
 
 def get_list_hash(list_name):
     data = json.dumps(load_list(list_name), sort_keys=True)
     return hashlib.md5(data.encode()).hexdigest()
 
-# --- Timer persistence ---
+# --- Timer management ---
+
 def load_timers():
     _ensure_dir(TIMERS_PATH)
     if os.path.exists(TIMERS_PATH):
@@ -119,5 +121,5 @@ def add_timer(timer_id, timer_data):
 def remove_timer(timer_id):
     timers = load_timers()
     if timer_id in timers:
-        del timers[timer_id]
+        timers.pop(timer_id)
         save_timers(timers)
