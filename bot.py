@@ -4,25 +4,17 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 from data_manager import (
-    load_list,
-    save_list,
-    add_to_list,
-    edit_entry,
-    remove_entry,
-    delete_list,
-    list_exists,
-    save_dashboard_id,
-    get_dashboard_id,
-    get_all_dashboards,
-    get_list_hash
+    load_list, save_list, add_to_list, edit_entry, remove_entry,
+    delete_list, list_exists, save_dashboard_id, get_dashboard_id,
+    get_all_dashboards, get_list_hash
 )
 from dotenv import load_dotenv
 import asyncio
 
-print("🔧 bot.py v5 (with access handling & Owner category) is loading…")
+print("🔧 bot.py v7 (with Cog timers & Owner category) is loading…")
 load_dotenv()
 
-TOKEN     = os.getenv("DISCORD_TOKEN")
+TOKEN = os.getenv("DISCORD_TOKEN")
 CLIENT_ID = int(os.getenv("CLIENT_ID"))
 print("🔑 TOKEN loaded?", bool(TOKEN), "CLIENT_ID loaded?", bool(CLIENT_ID))
 
@@ -53,37 +45,32 @@ async def update_dashboard(list_name: str, interaction: discord.Interaction):
         return
     channel_id, message_id = dash
     channel = interaction.guild.get_channel(channel_id)
-    if channel is None:
+    if not channel:
         return
     try:
         msg = await channel.fetch_message(message_id)
         embed = build_embed(list_name)
         await msg.edit(embed=embed)
     except (discord.NotFound, discord.Forbidden):
-        return
+        pass
 
-# Background task for auto-updating dashboards
 last_hashes = {}
 async def background_updater():
     await bot.wait_until_ready()
     while not bot.is_closed():
-        dashboards = get_all_dashboards()
-        for list_name, dash in dashboards.items():
+        # Update list dashboards
+        for list_name, dash in get_all_dashboards().items():
             current_hash = get_list_hash(list_name)
             if last_hashes.get(list_name) != current_hash:
                 last_hashes[list_name] = current_hash
                 channel = bot.get_channel(dash["channel_id"])
-                if not channel:
-                    continue
-                try:
-                    msg = await channel.fetch_message(dash["message_id"])
-                    embed = build_embed(list_name)
-                    await msg.edit(embed=embed)
-                    print(f"🔁 Auto-updated dashboard for '{list_name}'")
-                except discord.Forbidden:
-                    print(f"🚫 No access to channel {channel.id} for '{list_name}', skipping auto-update")
-                except discord.NotFound:
-                    continue
+                if channel:
+                    try:
+                        msg = await channel.fetch_message(dash["message_id"])
+                        await msg.edit(embed=build_embed(list_name))
+                        print(f"🔁 Auto-updated dashboard for '{list_name}'")
+                    except (discord.NotFound, discord.Forbidden):
+                        pass
         await asyncio.sleep(60)
 
 @bot.event
@@ -166,21 +153,28 @@ async def list_dashboard(interaction: discord.Interaction, name: str):
             msg = await channel.fetch_message(message_id)
             await msg.edit(embed=embed)
             await interaction.response.send_message(f"✅ Dashboard for '{name}' updated.", ephemeral=True)
-        except:
+        except (discord.NotFound, discord.Forbidden):
             await interaction.response.send_message(embed=embed)
             msg = await interaction.original_response()
             save_dashboard_id(name, msg.channel.id, msg.id)
 
+# Help command
 @bot.tree.command(name="help", description="Show usage instructions")
 async def help_command(interaction: discord.Interaction):
-    help_text = ("**Gravity List Bot Help**\n\n"
-                 "/create_list name:<list> – Create a list\n"
-                 "/add_name list_name:<list> name:<entry> category:<cat> – Add a name\n"
-                 "/remove_name list_name:<list> name:<entry> – Remove a name\n"
-                 "/edit_name list_name:<list> old_name:<old> new_name:<new> new_category:<cat> – Edit a name\n"
-                 "/delete_list name:<list> – Delete a list\n"
-                 "/list name:<list> – Show or create dashboard\n"
-                 "/help – Show this help")
+    help_text = (
+        "**Gravity List Bot Help**\n\n"
+        "/create_list name:<list> – Create a list\n"
+        "/add_name list_name:<list> name:<entry> category:<cat> – Add a name\n"
+        "/remove_name list_name:<list> name:<entry> – Remove a name\n"
+        "/edit_name list_name:<list> old_name:<old> new_name:<new> new_category:<cat> – Edit a name\n"
+        "/delete_list name:<list> – Delete a list\n"
+        "/list name:<list> – Show or create dashboard\n"
+        "/create_timer name:<timer> hours:<int> minutes:<int> – Create a countdown timer\n"
+        "/help – Show this help"
+    )
     await interaction.response.send_message(help_text, ephemeral=True)
+
+# Load the timer cog extension
+bot.load_extension("timers")
 
 bot.run(TOKEN)
