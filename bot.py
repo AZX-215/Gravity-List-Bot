@@ -21,7 +21,6 @@ import asyncio
 
 print("🔧 bot.py (with access handling & Owner category) is loading…")
 load_dotenv()
-print("🔑 TOKEN loaded?", bool(TOKEN), "CLIENT_ID loaded?", bool(CLIENT_ID))
 
 TOKEN     = os.getenv("DISCORD_TOKEN")
 CLIENT_ID = int(os.getenv("CLIENT_ID"))
