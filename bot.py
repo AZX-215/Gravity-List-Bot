@@ -1,5 +1,7 @@
 
 import os
+import json
+import hashlib
 import discord
 from discord.ext import commands
 from discord import app_commands
@@ -11,10 +13,10 @@ from data_manager import (
 from dotenv import load_dotenv
 import asyncio
 
-print("🔧 bot.py v7 (with Cog timers & Owner category) is loading…")
+print("🔧 bot.py v8 (modular timers fix) loading…")
 load_dotenv()
 
-TOKEN = os.getenv("DISCORD_TOKEN")
+TOKEN     = os.getenv("DISCORD_TOKEN")
 CLIENT_ID = int(os.getenv("CLIENT_ID"))
 print("🔑 TOKEN loaded?", bool(TOKEN), "CLIENT_ID loaded?", bool(CLIENT_ID))
 
@@ -49,36 +51,37 @@ async def update_dashboard(list_name: str, interaction: discord.Interaction):
         return
     try:
         msg = await channel.fetch_message(message_id)
-        embed = build_embed(list_name)
-        await msg.edit(embed=embed)
+        await msg.edit(embed=build_embed(list_name))
     except (discord.NotFound, discord.Forbidden):
-        pass
+        return
 
-last_hashes = {}
+# Background updater for dashboards
 async def background_updater():
+    last_hashes = {}
     await bot.wait_until_ready()
     while not bot.is_closed():
-        # Update list dashboards
-        for list_name, dash in get_all_dashboards().items():
-            current_hash = get_list_hash(list_name)
-            if last_hashes.get(list_name) != current_hash:
-                last_hashes[list_name] = current_hash
+        dashboards = get_all_dashboards()
+        for list_name, dash in dashboards.items():
+            current = get_list_hash(list_name)
+            if last_hashes.get(list_name) != current:
+                last_hashes[list_name] = current
                 channel = bot.get_channel(dash["channel_id"])
                 if channel:
                     try:
                         msg = await channel.fetch_message(dash["message_id"])
                         await msg.edit(embed=build_embed(list_name))
-                        print(f"🔁 Auto-updated dashboard for '{list_name}'")
                     except (discord.NotFound, discord.Forbidden):
                         pass
         await asyncio.sleep(60)
 
 @bot.event
 async def on_ready():
-    synced = await bot.tree.sync()
-    print(f"🔄 Synced {len(synced)} global commands")
+    await bot.tree.sync()
+    print(f"🔄 Synced {len(bot.tree.get_commands())} global commands")
     print(f"✅ Bot is ready as {bot.user}")
     bot.loop.create_task(background_updater())
+
+# ---- List Commands ----
 
 @bot.tree.command(name="create_list", description="Create a new list")
 @app_commands.describe(name="Name of the new list")
@@ -153,28 +156,29 @@ async def list_dashboard(interaction: discord.Interaction, name: str):
             msg = await channel.fetch_message(message_id)
             await msg.edit(embed=embed)
             await interaction.response.send_message(f"✅ Dashboard for '{name}' updated.", ephemeral=True)
-        except (discord.NotFound, discord.Forbidden):
+        except:
             await interaction.response.send_message(embed=embed)
             msg = await interaction.original_response()
             save_dashboard_id(name, msg.channel.id, msg.id)
 
-# Help command
+# ---- Help ----
+
 @bot.tree.command(name="help", description="Show usage instructions")
 async def help_command(interaction: discord.Interaction):
     help_text = (
         "**Gravity List Bot Help**\n\n"
-        "/create_list name:<list> – Create a list\n"
-        "/add_name list_name:<list> name:<entry> category:<cat> – Add a name\n"
-        "/remove_name list_name:<list> name:<entry> – Remove a name\n"
-        "/edit_name list_name:<list> old_name:<old> new_name:<new> new_category:<cat> – Edit a name\n"
-        "/delete_list name:<list> – Delete a list\n"
-        "/list name:<list> – Show or create dashboard\n"
-        "/create_timer name:<timer> hours:<int> minutes:<int> – Create a countdown timer\n"
-        "/help – Show this help"
+        "/create_list name:<list>\n"
+        "/add_name list_name:<list> name:<entry> category:<cat>\n"
+        "/remove_name list_name:<list> name:<entry>\n"
+        "/edit_name list_name:<list> old_name:<old> new_name:<new> new_category:<cat>\n"
+        "/delete_list name:<list>\n"
+        "/list name:<list>\n"
+        "/create_timer name:<timer> hours:<int> minutes:<int>\n"
+        "/help\n"
     )
     await interaction.response.send_message(help_text, ephemeral=True)
 
-# Load the timer cog extension
+# Load timers extension (must be in same directory as bot.py)
 bot.load_extension("timers")
 
 bot.run(TOKEN)
