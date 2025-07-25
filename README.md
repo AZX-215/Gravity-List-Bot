@@ -8,6 +8,7 @@
 
 - Slash command interface for managing lists
 - Categorized entries with emojis & colors:
+  - 👑 Owner
   - 🔴 Enemy
   - 🟢 Friend
   - 🔵 Ally
