@@ -1,4 +1,3 @@
-
 import time
 import uuid
 import discord
@@ -17,38 +16,36 @@ class TimerCog(commands.Cog):
         self.timer_loop.cancel()
 
     def build_timer_embed(self, data):
-        name = data["name"]
-        now_ts = time.time()
+        now = time.time()
         if data.get("paused", False):
             remaining = data.get("remaining_time", 0)
-            status = "⏸️ Paused"
-            color = 0xFFD700
+            status    = "⏸️ Paused"
+            color     = 0xFFD700
         else:
-            end_ts = data.get("end_time", now_ts)
-            remaining = end_ts - now_ts
+            remaining = data["end_time"] - now
             if remaining > 0:
                 status = "⏳ Running"
-                color = 0x00FF00
+                color  = 0x00FF00
             else:
                 remaining = 0
-                status = "✅ Expired"
-                color = 0xFF0000
+                status    = "✅ Expired"
+                color     = 0xFF0000
         hrs, rem = divmod(int(remaining), 3600)
-        mins, secs = divmod(rem, 60)
-        timer_str = f"{hrs:02d}h {mins:02d}m {secs:02d}s"
+        mins, sec= divmod(rem, 60)
+        timer_str= f"{hrs:02d}h {mins:02d}m {sec:02d}s"
         embed = discord.Embed(
-            title=f"Timer: {name}",
+            title=f"Timer: {data['name']}",
             description=f"{status}\nRemaining: {timer_str}",
             color=color
         )
         return embed
 
     @app_commands.command(name="create_timer", description="Create a countdown timer")
-    @app_commands.describe(name="Name of the timer", hours="Hours", minutes="Minutes")
+    @app_commands.describe(name="Timer name", hours="Hours", minutes="Minutes")
     async def create_timer(self, interaction: discord.Interaction, name: str, hours: int, minutes: int):
-        total = hours * 3600 + minutes * 60
-        end_ts = time.time() + total
-        tid = str(uuid.uuid4())
+        total   = hours*3600 + minutes*60
+        end_ts  = time.time() + total
+        tid     = str(uuid.uuid4())
         timer_data = {
             "name": name,
             "end_time": end_ts,
@@ -63,7 +60,7 @@ class TimerCog(commands.Cog):
         add_timer(tid, timer_data)
 
     @app_commands.command(name="pause_timer", description="Pause a running timer")
-    @app_commands.describe(name="Name of the timer to pause")
+    @app_commands.describe(name="Name of timer to pause")
     async def pause_timer(self, interaction: discord.Interaction, name: str):
         timers = load_timers()
         for tid, data in timers.items():
@@ -80,11 +77,15 @@ class TimerCog(commands.Cog):
                         await msg.edit(embed=self.build_timer_embed(data))
                     except:
                         pass
-                return await interaction.response.send_message(f"⏸️ Paused timer '{name}'", ephemeral=True)
-        await interaction.response.send_message(f"❌ No running timer named '{name}' found", ephemeral=True)
+                return await interaction.response.send_message(
+                    f"⏸️ Paused timer '{name}'", ephemeral=True
+                )
+        await interaction.response.send_message(
+            f"❌ No running timer named '{name}' found", ephemeral=True
+        )
 
     @app_commands.command(name="resume_timer", description="Resume a paused timer")
-    @app_commands.describe(name="Name of the timer to resume")
+    @app_commands.describe(name="Name of timer to resume")
     async def resume_timer(self, interaction: discord.Interaction, name: str):
         timers = load_timers()
         for tid, data in timers.items():
@@ -101,25 +102,33 @@ class TimerCog(commands.Cog):
                         await msg.edit(embed=self.build_timer_embed(data))
                     except:
                         pass
-                return await interaction.response.send_message(f"▶️ Resumed timer '{name}'", ephemeral=True)
-        await interaction.response.send_message(f"❌ No paused timer named '{name}' found", ephemeral=True)
+                return await interaction.response.send_message(
+                    f"▶️ Resumed timer '{name}'", ephemeral=True
+                )
+        await interaction.response.send_message(
+            f"❌ No paused timer named '{name}' found", ephemeral=True
+        )
 
     @app_commands.command(name="delete_timer", description="Delete a timer")
-    @app_commands.describe(name="Name of the timer to delete")
+    @app_commands.describe(name="Name of timer to delete")
     async def delete_timer(self, interaction: discord.Interaction, name: str):
         timers = load_timers()
         for tid, data in list(timers.items()):
             if data["name"].lower() == name.lower():
                 remove_timer(tid)
-                return await interaction.response.send_message(f"🗑️ Deleted timer '{name}'", ephemeral=True)
-        await interaction.response.send_message(f"❌ No timer named '{name}' found", ephemeral=True)
+                return await interaction.response.send_message(
+                    f"🗑️ Deleted timer '{name}'", ephemeral=True
+                )
+        await interaction.response.send_message(
+            f"❌ No timer named '{name}' found", ephemeral=True
+        )
 
     @tasks.loop(seconds=POLL_INTERVAL)
     async def timer_loop(self):
         if not self.bot.is_ready():
             return
         timers = load_timers()
-        for tid, data in list(timers.items()):
+        for tid, data in timers.items():
             channel = self.bot.get_channel(data["channel_id"])
             if channel:
                 try:
