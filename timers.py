@@ -1,6 +1,5 @@
 
 import time
-import asyncio
 import uuid
 import discord
 from discord.ext import commands, tasks
@@ -40,7 +39,7 @@ class TimerCog(commands.Cog):
         return embed
 
     @app_commands.command(name="create_timer", description="Create a countdown timer")
-    @app_commands.describe(name="Name of the timer", hours="Hours to countdown", minutes="Minutes to countdown")
+    @app_commands.describe(name="Name of the timer", hours="Hours", minutes="Minutes")
     async def create_timer(self, interaction: discord.Interaction, name: str, hours: int, minutes: int):
         total = hours*3600 + minutes*60
         end_ts = time.time() + total
