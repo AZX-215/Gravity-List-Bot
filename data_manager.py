@@ -2,30 +2,26 @@
 import os
 import json
 import hashlib
+import time
 
-# Read storage path from environment, default to './lists/data.json'
+# Paths for standard lists, dashboards, timers, and generator lists
 DATABASE_PATH = os.getenv("DATABASE_PATH", "./lists/data.json")
-# Dashboards file in same directory
-DASHBOARDS_PATH = os.getenv("DASHBOARDS_PATH", None)
-if DASHBOARDS_PATH is None:
-    DASHBOARDS_PATH = os.path.join(os.path.dirname(DATABASE_PATH), "dashboards.json")
-
-# Timers file in same directory
-TIMERS_PATH = os.getenv("TIMERS_PATH", None)
-if TIMERS_PATH is None:
-    TIMERS_PATH = os.path.join(os.path.dirname(DATABASE_PATH), "timers.json")
+DASHBOARDS_PATH = os.getenv("DASHBOARDS_PATH") or os.path.join(os.path.dirname(DATABASE_PATH), "dashboards.json")
+TIMERS_PATH = os.getenv("TIMERS_PATH") or os.path.join(os.path.dirname(DATABASE_PATH), "timers.json")
+GEN_LISTS_DIR = os.path.join(os.path.dirname(DATABASE_PATH), "generator_lists")
+GEN_DASHBOARDS_PATH = os.getenv("GEN_DASHBOARDS_PATH") or os.path.join(os.path.dirname(DATABASE_PATH), "generator_dashboards.json")
 
 def _ensure_dir(path):
-    base_dir = os.path.dirname(path)
-    if base_dir and not os.path.exists(base_dir):
-        os.makedirs(base_dir, exist_ok=True)
+    base = os.path.dirname(path)
+    if base and not os.path.exists(base):
+        os.makedirs(base, exist_ok=True)
 
-# --- List management ---
+# --- Standard list management ---
 
 def _get_list_path(list_name):
     _ensure_dir(DATABASE_PATH)
-    base_dir = os.path.dirname(DATABASE_PATH)
-    return os.path.join(base_dir, f"{list_name}.json")
+    base = os.path.dirname(DATABASE_PATH)
+    return os.path.join(base, f"{list_name}.json")
 
 def save_list(list_name, data):
     path = _get_list_path(list_name)
@@ -39,25 +35,6 @@ def load_list(list_name):
             return json.load(f)
     return []
 
-def add_to_list(list_name, entry, category):
-    data = load_list(list_name)
-    data.append({"name": entry, "category": category})
-    save_list(list_name, data)
-
-def edit_entry(list_name, old_name, new_name, new_category):
-    data = load_list(list_name)
-    for item in data:
-        if item["name"].lower() == old_name.lower():
-            item["name"] = new_name
-            item["category"] = new_category
-            break
-    save_list(list_name, data)
-
-def remove_entry(list_name, entry):
-    data = load_list(list_name)
-    new_data = [item for item in data if item["name"].lower() != entry.lower()]
-    save_list(list_name, new_data)
-
 def delete_list(list_name):
     path = _get_list_path(list_name)
     if os.path.exists(path):
@@ -66,7 +43,13 @@ def delete_list(list_name):
 def list_exists(list_name):
     return os.path.exists(_get_list_path(list_name))
 
-# --- Dashboard management ---
+def get_all_list_names():
+    _ensure_dir(DATABASE_PATH)
+    base = os.path.dirname(DATABASE_PATH)
+    names = [f[:-5] for f in os.listdir(base) if f.endswith(".json")]
+    return sorted(names)
+
+# --- Standard dashboards ---
 
 def _load_dashboards():
     _ensure_dir(DASHBOARDS_PATH)
@@ -95,10 +78,6 @@ def get_dashboard_id(list_name):
 def get_all_dashboards():
     return _load_dashboards()
 
-def get_list_hash(list_name):
-    data = json.dumps(load_list(list_name), sort_keys=True)
-    return hashlib.md5(data.encode()).hexdigest()
-
 # --- Timer management ---
 
 def load_timers():
@@ -123,3 +102,87 @@ def remove_timer(timer_id):
     if timer_id in timers:
         timers.pop(timer_id)
         save_timers(timers)
+
+# --- Generator list management ---
+
+def _get_gen_list_path(list_name):
+    _ensure_dir(GEN_LISTS_DIR + "/.placeholder")
+    return os.path.join(GEN_LISTS_DIR, f"{list_name}.json")
+
+def save_gen_list(list_name, data):
+    path = _get_gen_list_path(list_name)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w") as f:
+        json.dump(data, f, indent=2)
+
+def load_gen_list(list_name):
+    path = _get_gen_list_path(list_name)
+    if os.path.exists(path):
+        with open(path, "r") as f:
+            return json.load(f)
+    return []
+
+def delete_gen_list(list_name):
+    path = _get_gen_list_path(list_name)
+    if os.path.exists(path):
+        os.remove(path)
+
+def gen_list_exists(list_name):
+    return os.path.exists(_get_gen_list_path(list_name))
+
+def get_all_gen_list_names():
+    _ensure_dir(GEN_LISTS_DIR + "/.placeholder")
+    if not os.path.exists(GEN_LISTS_DIR):
+        return []
+    names = [f[:-5] for f in os.listdir(GEN_LISTS_DIR) if f.endswith(".json")]
+    return sorted(names)
+
+def add_to_gen_list(list_name, entry_name, gen_type, element, shards, gas, imbued):
+    data = load_gen_list(list_name)
+    data.append({
+        "name": entry_name,
+        "type": gen_type,
+        "element": element,
+        "shards": shards,
+        "gas": gas,
+        "imbued": imbued,
+        "timestamp": time.time()
+    })
+    save_gen_list(list_name, data)
+
+# --- Generator dashboards ---
+
+def _load_gen_dashboards():
+    _ensure_dir(GEN_DASHBOARDS_PATH)
+    if os.path.exists(GEN_DASHBOARDS_PATH):
+        with open(GEN_DASHBOARDS_PATH, "r") as f:
+            return json.load(f)
+    return {}
+
+def _save_gen_dashboards(data):
+    _ensure_dir(GEN_DASHBOARDS_PATH)
+    with open(GEN_DASHBOARDS_PATH, "w") as f:
+        json.dump(data, f, indent=2)
+
+def save_gen_dashboard_id(list_name, channel_id, message_id):
+    data = _load_gen_dashboards()
+    data[list_name] = {"channel_id": channel_id, "message_id": message_id}
+    _save_gen_dashboards(data)
+
+def get_gen_dashboard_id(list_name):
+    data = _load_gen_dashboards()
+    dash = data.get(list_name)
+    if dash:
+        return dash["channel_id"], dash["message_id"]
+    return None
+
+def get_all_gen_dashboards():
+    return _load_gen_dashboards()
+
+# --- Hashing ---
+
+def get_list_hash(list_name):
+    return hashlib.md5(json.dumps(load_list(list_name), sort_keys=True).encode()).hexdigest()
+
+def get_gen_list_hash(list_name):
+    return hashlib.md5(json.dumps(load_gen_list(list_name), sort_keys=True).encode()).hexdigest()

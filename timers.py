@@ -18,31 +18,24 @@ class TimerCog(commands.Cog):
 
     def build_timer_embed(self, data):
         name = data["name"]
-        status = ""
-        color = 0x808080
         now_ts = time.time()
-
         if data.get("paused", False):
             remaining = data.get("remaining_time", 0)
-            hrs, rem = divmod(int(remaining), 3600)
-            mins, secs = divmod(rem, 60)
-            timer_str = f"{hrs:02d}h {mins:02d}m {secs:02d}s"
             status = "⏸️ Paused"
-            color = 0xFFD700  # gold for paused
+            color = 0xFFD700
         else:
             end_ts = data.get("end_time", now_ts)
             remaining = end_ts - now_ts
             if remaining > 0:
-                hrs, rem = divmod(int(remaining), 3600)
-                mins, secs = divmod(rem, 60)
-                timer_str = f"{hrs:02d}h {mins:02d}m {secs:02d}s"
                 status = "⏳ Running"
-                color = 0x00FF00  # green
+                color = 0x00FF00
             else:
-                timer_str = "00h 00m 00s"
+                remaining = 0
                 status = "✅ Expired"
-                color = 0xFF0000  # red
-
+                color = 0xFF0000
+        hrs, rem = divmod(int(remaining), 3600)
+        mins, secs = divmod(rem, 60)
+        timer_str = f"{hrs:02d}h {mins:02d}m {secs:02d}s"
         embed = discord.Embed(
             title=f"Timer: {name}",
             description=f"{status}\nRemaining: {timer_str}",
@@ -75,8 +68,7 @@ class TimerCog(commands.Cog):
         timers = load_timers()
         for tid, data in timers.items():
             if data["name"].lower() == name.lower() and not data.get("paused", False):
-                now_ts = time.time()
-                remaining = data["end_time"] - now_ts
+                remaining = data["end_time"] - time.time()
                 data["remaining_time"] = remaining
                 data["paused"] = True
                 data.pop("end_time", None)
@@ -97,9 +89,8 @@ class TimerCog(commands.Cog):
         timers = load_timers()
         for tid, data in timers.items():
             if data["name"].lower() == name.lower() and data.get("paused", False):
-                now_ts = time.time()
                 remaining = data.get("remaining_time", 0)
-                data["end_time"] = now_ts + remaining
+                data["end_time"] = time.time() + remaining
                 data["paused"] = False
                 data.pop("remaining_time", None)
                 save_timers(timers)
@@ -130,13 +121,12 @@ class TimerCog(commands.Cog):
         timers = load_timers()
         for tid, data in list(timers.items()):
             channel = self.bot.get_channel(data["channel_id"])
-            if not channel:
-                continue
-            try:
-                msg = await channel.fetch_message(data["message_id"])
-                await msg.edit(embed=self.build_timer_embed(data))
-            except:
-                pass
+            if channel:
+                try:
+                    msg = await channel.fetch_message(data["message_id"])
+                    await msg.edit(embed=self.build_timer_embed(data))
+                except:
+                    pass
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(TimerCog(bot))
