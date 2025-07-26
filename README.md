@@ -12,7 +12,7 @@
 ## 📦 Key Features
 
 1. **Categorized Lists**  
-   - Create, add, edit, remove, delete entries with emojis: 👑 Owner | 🔴 Enemy | 🟢 Friend | 🔵 Ally | 🟡 Bob  
+   - Create, add, edit, remove, delete entries with emojis: 👑 Owner | 🔴 Enemy | 🟢 Friend | 🔵 Ally | 🟡 Beta  
    - Inline timers in lists: ⏳ entries count down live
 
 2. **Standalone Countdown Timers**  
