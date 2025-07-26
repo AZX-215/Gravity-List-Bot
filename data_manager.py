@@ -6,16 +6,14 @@ import time
 # Paths
 DATABASE_PATH       = os.getenv("DATABASE_PATH", "./lists/data.json")
 DASHBOARDS_PATH     = os.getenv("DASHBOARDS_PATH") or os.path.join(os.path.dirname(DATABASE_PATH), "dashboards.json")
-TIMERS_PATH         = os.getenv("TIMERS_PATH")   or os.path.join(os.path.dirname(DATABASE_PATH), "timers.json")
 GEN_LISTS_DIR       = os.path.join(os.path.dirname(DATABASE_PATH), "generator_lists")
 GEN_DASHBOARDS_PATH = os.getenv("GEN_DASHBOARDS_PATH") or os.path.join(os.path.dirname(DATABASE_PATH), "generator_dashboards.json")
-
+TIMERS_PATH         = os.path.join(os.path.dirname(DATABASE_PATH), "timers.json")
 
 def _ensure_dir(path):
     base = os.path.dirname(path)
     if base and not os.path.exists(base):
         os.makedirs(base, exist_ok=True)
-
 
 # ━━━ Standard Lists ━━━━━━━━━━━━━━━━━━━━
 
@@ -49,7 +47,6 @@ def get_all_list_names():
     base = os.path.dirname(DATABASE_PATH)
     return sorted([f[:-5] for f in os.listdir(base) if f.endswith(".json")])
 
-
 # ━━━ Dashboards ━━━━━━━━━━━━━━━━━━━━━━━
 
 def _load_dashboards():
@@ -76,7 +73,6 @@ def get_dashboard_id(list_name):
 
 def get_all_dashboards():
     return _load_dashboards()
-
 
 # ━━━ Generator Lists ━━━━━━━━━━━━━━━━━━
 
@@ -121,7 +117,6 @@ def add_to_gen_list(list_name, entry_name, gen_type, element, shards, gas, imbue
     })
     save_gen_list(list_name, data)
 
-
 # ━━━ Generator Dashboards ━━━━━━━━━━━━
 
 def _load_gen_dashboards():
@@ -149,7 +144,6 @@ def get_gen_dashboard_id(list_name):
 def get_all_gen_dashboards():
     return _load_gen_dashboards()
 
-
 # ━━━ Hash Helpers ━━━━━━━━━━━━━━━━━━━━━
 
 def get_list_hash(list_name):
@@ -157,3 +151,32 @@ def get_list_hash(list_name):
 
 def get_gen_list_hash(list_name):
     return hashlib.md5(json.dumps(load_gen_list(list_name), sort_keys=True).encode()).hexdigest()
+
+# ━━━ Timer Persistence ━━━━━━━━━━━━━━━━━━━━
+
+def load_timers():
+    """Load all timers from disk as a dict of {timer_id: data}."""
+    _ensure_dir(TIMERS_PATH)
+    if os.path.exists(TIMERS_PATH):
+        with open(TIMERS_PATH, "r") as f:
+            return json.load(f)
+    return {}
+
+def save_timers(data):
+    """Save the entire timers dict to disk."""
+    _ensure_dir(TIMERS_PATH)
+    with open(TIMERS_PATH, "w") as f:
+        json.dump(data, f, indent=2)
+
+def add_timer(timer_id, timer_data):
+    """Add or overwrite a single timer entry."""
+    timers = load_timers()
+    timers[timer_id] = timer_data
+    save_timers(timers)
+
+def remove_timer(timer_id):
+    """Remove a timer by its ID."""
+    timers = load_timers()
+    if timer_id in timers:
+        del timers[timer_id]
+        save_timers(timers)
