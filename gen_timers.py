@@ -4,10 +4,11 @@ from discord.ext import commands, tasks
 from discord import app_commands
 from data_manager import (
     load_gen_list, save_gen_list, gen_list_exists, delete_gen_list, get_all_gen_list_names,
-    add_to_gen_list, get_all_gen_dashboards, get_gen_dashboard_id, save_gen_dashboard_id, get_gen_list_hash
+    add_to_gen_list, get_all_gen_dashboards, get_gen_dashboard_id, save_gen_dashboard_id, get_gen_list_hash,
+    set_gen_list_role, get_gen_list_role
 )
 
-GEN_EMOJIS = {"Tek":"🔄", "Electrical":"⛽"}
+GEN_EMOJIS = {"Tek": "🔄", "Electrical": "⛽"}
 
 def build_gen_embed(list_name: str) -> discord.Embed:
     data = load_gen_list(list_name)
@@ -16,41 +17,14 @@ def build_gen_embed(list_name: str) -> discord.Embed:
     for item in data:
         emoji = GEN_EMOJIS.get(item["type"], "")
         if item["type"] == "Tek":
-            total_secs = item["element"] * 18*3600 + item["shards"] * 648  # 100 shards = 18 hours, so 1 shard = 648s
-            rem_secs = max(0, int(item["timestamp"] + total_secs - now))
-
-            # Calculate remaining element/shards
-            elapsed = max(0, now - item["timestamp"])
-            shards_used = min(item["shards"], int(elapsed // 648))
-            elapsed -= shards_used * 648
-            element_used = min(item["element"], int(elapsed // (18*3600)))
-            shards_left = item["shards"] - shards_used
-            element_left = item["element"] - element_used
-
-            h, r = divmod(rem_secs, 3600)
-            m, s = divmod(r, 60)
-            timer_str = f"{h:02d}h {m:02d}m {s:02d}s"
-            fuel_str = f"{element_left} Element, {shards_left} Shards"
-        else:  # Electrical
-            total_secs = item["gas"] * 3600 + item["imbued"] * 4*3600
-            rem_secs = max(0, int(item["timestamp"] + total_secs - now))
-
-            elapsed = max(0, now - item["timestamp"])
-            imbued_used = min(item["imbued"], int(elapsed // (4*3600)))
-            elapsed -= imbued_used * 4*3600
-            gas_used = min(item["gas"], int(elapsed // 3600))
-            imbued_left = item["imbued"] - imbued_used
-            gas_left = item["gas"] - gas_used
-
-            h, r = divmod(rem_secs, 3600)
-            m, s = divmod(r, 60)
-            timer_str = f"{h:02d}h {m:02d}m {s:02d}s"
-            fuel_str = f"{gas_left} Gas, {imbued_left} Imbued"
-        embed.add_field(
-            name=f"{emoji} {item['name']}",
-            value=f"{timer_str}\nFuel Left: {fuel_str}",
-            inline=False
-        )
+            dur = item["element"] * 18 * 3600 + item["shards"] * 648  # 100 shards = 18hr
+        else:
+            dur = item["gas"] * 3600 + item["imbued"] * 4 * 3600
+        rem = max(0, int(item["timestamp"] + dur - now))
+        h, r = divmod(rem, 3600)
+        m, s = divmod(r, 60)
+        timer_str = f"{h:02d}h {m:02d}m {s:02d}s"
+        embed.add_field(name=f"{emoji} {item['name']}", value=timer_str, inline=False)
     return embed
 
 class GeneratorCog(commands.Cog):
@@ -62,7 +36,7 @@ class GeneratorCog(commands.Cog):
     def cog_unload(self):
         self.generator_list_loop.cancel()
 
-    @tasks.loop(minutes=2)  # UPDATED: refresh every 2 minutes
+    @tasks.loop(minutes=2)
     async def generator_list_loop(self):
         for name, dash in get_all_gen_dashboards().items():
             channel = self.bot.get_channel(dash["channel_id"])
@@ -73,14 +47,38 @@ class GeneratorCog(commands.Cog):
                 await msg.edit(embed=build_gen_embed(name))
             except:
                 pass
+        # Expiry ping logic
+        now = time.time()
+        for list_name in get_all_gen_list_names():
+            data = load_gen_list(list_name)
+            ping_role = get_gen_list_role(list_name)
+            dash = get_gen_dashboard_id(list_name)
+            channel = self.bot.get_channel(dash["channel_id"]) if dash else None
+            for item in data:
+                if not item.get("expired"):
+                    if item["type"] == "Tek":
+                        dur = item["element"] * 18 * 3600 + item["shards"] * 648
+                    else:
+                        dur = item["gas"] * 3600 + item["imbued"] * 4 * 3600
+                    if now > item["timestamp"] + dur:
+                        item["expired"] = True
+                        mention = f"<@&{ping_role}>" if ping_role else ""
+                        if channel:
+                            try:
+                                await channel.send(f"⚡ Generator **{item['name']}** expired! {mention}")
+                            except Exception as e:
+                                print(f"[GenTimer Ping] Error: {e}")
+            save_gen_list(list_name, data)
 
     @app_commands.command(name="create_generator_list", description="Create a new generator timer list")
-    @app_commands.describe(name="Name of the generator list")
-    async def create_generator_list(self, interaction: discord.Interaction, name: str):
+    @app_commands.describe(name="Name of the generator list", role="Role to ping if any generator timer expires")
+    async def create_generator_list(self, interaction: discord.Interaction, name: str, role: discord.Role = None):
         if gen_list_exists(name):
             return await interaction.response.send_message(f"⚠️ Generator list '{name}' exists.", ephemeral=True)
         save_gen_list(name, [])
-        await interaction.response.send_message(f"✅ Created generator list '{name}'.", ephemeral=True)
+        if role:
+            set_gen_list_role(name, role.id)
+        await interaction.response.send_message(f"✅ Created generator list '{name}'{' with role ping' if role else ''}.", ephemeral=True)
 
     @app_commands.command(name="add_generator", description="Add a generator entry to a list")
     @app_commands.describe(

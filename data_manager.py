@@ -117,6 +117,31 @@ def add_to_gen_list(list_name, entry_name, gen_type, element, shards, gas, imbue
     })
     save_gen_list(list_name, data)
 
+# ━━━ Generator List Role Support ━━━━━━━━━━━━━━━━
+
+def set_gen_list_role(list_name, role_id):
+    """Save the role_id (for pings) in a metadata file for the generator list."""
+    path = _get_gen_list_path(list_name)
+    if os.path.exists(path):
+        with open(path, "r") as f:
+            data = json.load(f)
+    else:
+        data = []
+    meta_path = path + ".meta"
+    meta = {"role_id": role_id}
+    with open(meta_path, "w") as f:
+        json.dump(meta, f)
+
+def get_gen_list_role(list_name):
+    """Return the role_id for this generator list, or None."""
+    path = _get_gen_list_path(list_name) + ".meta"
+    if os.path.exists(path):
+        with open(path, "r") as f:
+            meta = json.load(f)
+            return meta.get("role_id")
+    return None
+
+
 # ━━━ Generator Dashboards ━━━━━━━━━━━━
 
 def _load_gen_dashboards():

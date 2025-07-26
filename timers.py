@@ -38,11 +38,15 @@ class TimerCog(commands.Cog):
             description=f"{status}\nRemaining: {timer_str}",
             color=color
         )
+        if data.get("role_id"):
+            embed.set_footer(text=f"Pings: <@&{data['role_id']}>")
+        elif data.get("owner_id"):
+            embed.set_footer(text=f"Pings: <@{data['owner_id']}>")
         return embed
 
     @app_commands.command(name="create_timer", description="Create a countdown timer")
-    @app_commands.describe(name="Timer name", hours="Hours", minutes="Minutes")
-    async def create_timer(self, interaction: discord.Interaction, name: str, hours: int, minutes: int):
+    @app_commands.describe(name="Timer name", hours="Hours", minutes="Minutes", role="Role to ping when timer expires (optional)")
+    async def create_timer(self, interaction: discord.Interaction, name: str, hours: int, minutes: int, role: discord.Role = None):
         total   = hours*3600 + minutes*60
         end_ts  = time.time() + total
         tid     = str(uuid.uuid4())
@@ -51,7 +55,10 @@ class TimerCog(commands.Cog):
             "end_time": end_ts,
             "channel_id": interaction.channel_id,
             "message_id": None,
-            "paused": False
+            "paused": False,
+            "owner_id": interaction.user.id,
+            "role_id": role.id if role else None,
+            "expired": False
         }
         embed = self.build_timer_embed(timer_data)
         await interaction.response.send_message(embed=embed)
@@ -128,14 +135,31 @@ class TimerCog(commands.Cog):
         if not self.bot.is_ready():
             return
         timers = load_timers()
+        changed = False
         for tid, data in timers.items():
             channel = self.bot.get_channel(data["channel_id"])
+            expired = data.get("expired", False)
+            now = time.time()
+            # Expire detection
+            if not expired and not data.get("paused", False) and now >= data["end_time"]:
+                data["expired"] = True
+                changed = True
+                # Ping
+                ping = f"<@&{data['role_id']}>" if data.get("role_id") else f"<@{data['owner_id']}>"
+                if channel:
+                    try:
+                        await channel.send(f"⏰ Timer **{data['name']}** expired! {ping}")
+                    except Exception as e:
+                        print(f"[Timer Ping] Error: {e}")
+            # Always update embed
             if channel:
                 try:
                     msg = await channel.fetch_message(data["message_id"])
                     await msg.edit(embed=self.build_timer_embed(data))
                 except:
                     pass
+        if changed:
+            save_timers(timers)
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(TimerCog(bot))
