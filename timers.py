@@ -144,9 +144,12 @@ class TimerCog(commands.Cog):
             if not expired and not data.get("paused", False) and now >= data["end_time"]:
                 data["expired"] = True
                 changed = True
-                # Ping
-                ping = f"<@&{data['role_id']}>" if data.get("role_id") else f"<@{data['owner_id']}>"
-                if channel:
+                ping = ""
+                if data.get("role_id"):
+                    ping = f"<@&{data['role_id']}>"
+                elif data.get("owner_id"):
+                    ping = f"<@{data['owner_id']}>"
+                if channel and ping:
                     try:
                         await channel.send(f"⏰ Timer **{data['name']}** expired! {ping}")
                     except Exception as e:
