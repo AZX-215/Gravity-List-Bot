@@ -16,19 +16,36 @@ def build_gen_embed(list_name: str) -> discord.Embed:
     now = time.time()
     for item in data:
         emoji = GEN_EMOJIS.get(item["type"], "")
+        start_time = item["timestamp"]
         if item["type"] == "Tek":
-            dur = item["element"] * 18 * 3600 + item["shards"] * 648  # 100 shards = 18hr
+            # 1 element = 18h (64800s), 100 shards = 18h, 1 shard = 648s
+            total_seconds = item["element"] * 64800 + item["shards"] * 648
+            elapsed = max(0, now - start_time)
+            total_shards = item["shards"] + item["element"] * 100
+            elapsed_shards = min(total_shards, int(elapsed / 648))
+            rem_shards = max(0, total_shards - elapsed_shards)
+            rem_element = rem_shards // 100
+            rem_shards = rem_shards % 100
+            rem = max(0, int(item["timestamp"] + total_seconds - now))
+            h, r = divmod(rem, 3600)
+            m, s = divmod(r, 60)
+            timer_str = f"{h:02d}h {m:02d}m {s:02d}s | Element: {rem_element} | Shards: {rem_shards}"
         else:
-            dur = item["gas"] * 3600 + item["imbued"] * 4 * 3600
-        rem = max(0, int(item["timestamp"] + dur - now))
-        h, r = divmod(rem, 3600)
-        m, s = divmod(r, 60)
-        timer_str = f"{h:02d}h {m:02d}m {s:02d}s"
+            # 1 gas = 1h (3600s), 1 imbued = 4h (14400s)
+            total_seconds = item["gas"] * 3600 + item["imbued"] * 14400
+            elapsed = max(0, now - start_time)
+            gas_used = min(item["gas"], int(elapsed // 3600))
+            imbued_used = min(item["imbued"], int(elapsed // 14400))
+            rem_gas = max(0, item["gas"] - gas_used)
+            rem_imbued = max(0, item["imbued"] - imbued_used)
+            rem = max(0, int(item["timestamp"] + total_seconds - now))
+            h, r = divmod(rem, 3600)
+            m, s = divmod(r, 60)
+            timer_str = f"{h:02d}h {m:02d}m {s:02d}s | Gas: {rem_gas} | Imbued: {rem_imbued}"
         embed.add_field(name=f"{emoji} {item['name']}", value=timer_str, inline=False)
     return embed
 
 class GeneratorCog(commands.Cog):
-    """Cog for Ark generator list commands and live countdowns."""
     def __init__(self, bot: commands.Bot):
         self.bot = bot
         self.generator_list_loop.start()
@@ -39,27 +56,28 @@ class GeneratorCog(commands.Cog):
     @tasks.loop(minutes=2)
     async def generator_list_loop(self):
         for name, dash in get_all_gen_dashboards().items():
-            channel = self.bot.get_channel(dash["channel_id"])
+            channel = self.bot.get_channel(dash[0]) if dash else None  # FIXED tuple index
             if not channel:
                 continue
             try:
-                msg = await channel.fetch_message(dash["message_id"])
+                msg = await channel.fetch_message(dash[1])  # FIXED tuple index
                 await msg.edit(embed=build_gen_embed(name))
-            except:
-                pass
+            except Exception as e:
+                print(f"[GenTimer Dashboard] Error: {e}")
+
         # Expiry ping logic
         now = time.time()
         for list_name in get_all_gen_list_names():
             data = load_gen_list(list_name)
             ping_role = get_gen_list_role(list_name)
             dash = get_gen_dashboard_id(list_name)
-            channel = self.bot.get_channel(dash["channel_id"]) if dash else None
+            channel = self.bot.get_channel(dash[0]) if dash else None  # FIXED tuple index
             for item in data:
                 if not item.get("expired"):
                     if item["type"] == "Tek":
-                        dur = item["element"] * 18 * 3600 + item["shards"] * 648
+                        dur = item["element"] * 64800 + item["shards"] * 648
                     else:
-                        dur = item["gas"] * 3600 + item["imbued"] * 4 * 3600
+                        dur = item["gas"] * 3600 + item["imbued"] * 14400
                     if now > item["timestamp"] + dur:
                         item["expired"] = True
                         mention = f"<@&{ping_role}>" if ping_role else ""
