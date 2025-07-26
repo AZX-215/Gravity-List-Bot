@@ -6,8 +6,8 @@ from discord import app_commands
 from dotenv import load_dotenv
 
 from data_manager import (
-    load_list, save_list, list_exists, delete_list, get_all_list_names,
-    get_all_gen_list_names,
+    load_list, save_list, list_exists, delete_list,
+    get_all_list_names, get_all_gen_list_names,
     save_dashboard_id, get_dashboard_id, get_all_dashboards, get_list_hash
 )
 from timers import setup as setup_timers
@@ -22,8 +22,8 @@ intents.guilds = True
 bot = commands.Bot(command_prefix="!", intents=intents, application_id=CLIENT_ID)
 
 CATEGORY_EMOJIS = {
-    "Owner":"👑", "Enemy":"🔴", "Friend":"🟢",
-    "Ally":"🔵",  "Bob":"🟡",  "Timer":"⏳"
+    "Owner": "👑", "Enemy": "🔴", "Friend": "🟢",
+    "Ally":   "🔵", "Bob":   "🟡", "Timer":"⏳"
 }
 
 
@@ -39,15 +39,14 @@ def build_embed(list_name: str) -> discord.Embed:
             rem   = max(0, int(start + dur - now))
             h, r  = divmod(rem, 3600)
             m, s  = divmod(r, 60)
-            timer_str = f"{h:02d}h {m:02d}m {s:02d}s"
-            name_field = f"⏳ {item['name']} — {timer_str}"
+            name_field = f"⏳ {item['name']} — {h:02d}h {m:02d}m {s:02d}s"
         else:
             name_field = f"{CATEGORY_EMOJIS.get(item['category'],'')} {item['name']}"
         embed.add_field(name=name_field, value="\u200b", inline=False)
     return embed
 
 
-# ━━━ Regular Lists Loop (every 5s, on-change only) ━━━━━━━━━━━━━━━━
+# ━━━ Regular Lists Loop (every 5s, on-change only) ━━━━━━━━━━━━━━━━━━━
 @tasks.loop(seconds=5)
 async def regular_list_loop():
     hashes = getattr(regular_list_loop, "_hashes", {})
@@ -55,10 +54,11 @@ async def regular_list_loop():
         h = get_list_hash(name)
         if hashes.get(name) != h:
             hashes[name] = h
-            ch = bot.get_channel(dash["channel_id"])
+            channel_id, message_id = dash
+            ch = bot.get_channel(channel_id)
             if ch:
                 try:
-                    msg = await ch.fetch_message(dash["message_id"])
+                    msg = await ch.fetch_message(message_id)
                     await msg.edit(embed=build_embed(name))
                 except:
                     pass
@@ -67,13 +67,13 @@ async def regular_list_loop():
 
 @bot.event
 async def on_ready():
-    # Start the 1s timer Cog
+    # start standalone timers Cog (1s updates)
     await setup_timers(bot)
-    # Start the 2s generator Cog
+    # start generator Cog (2s updates)
     await setup_gen_timers(bot)
-    # Sync all commands
+    # sync slash commands
     await bot.tree.sync()
-    # Start the 5s regular-list loop
+    # start regular list loop
     regular_list_loop.start()
     print(f"Bot ready. Commands synced for {bot.user}")
 
@@ -84,9 +84,13 @@ async def on_ready():
 @app_commands.describe(name="Name of the new list")
 async def create_list(interaction: discord.Interaction, name: str):
     if list_exists(name):
-        return await interaction.response.send_message(f"⚠️ List '{name}' already exists.", ephemeral=True)
+        return await interaction.response.send_message(
+            f"⚠️ List '{name}' already exists.", ephemeral=True
+        )
     save_list(name, [])
-    await interaction.response.send_message(f"✅ Created list '{name}'.", ephemeral=True)
+    await interaction.response.send_message(
+        f"✅ Created list '{name}'.", ephemeral=True
+    )
 
 
 @bot.tree.command(name="add_name", description="Add an entry to a list")
@@ -97,23 +101,40 @@ async def create_list(interaction: discord.Interaction, name: str):
     app_commands.Choice(name=k, value=k)
     for k in CATEGORY_EMOJIS if k != "Timer"
 ])
-async def add_name(interaction: discord.Interaction, list_name: str, name: str, category: app_commands.Choice[str]):
+async def add_name(
+    interaction: discord.Interaction,
+    list_name: str,
+    name: str,
+    category: app_commands.Choice[str]
+):
     if not list_exists(list_name):
-        return await interaction.response.send_message(f"❌ List '{list_name}' not found.", ephemeral=True)
+        return await interaction.response.send_message(
+            f"❌ List '{list_name}' not found.", ephemeral=True
+        )
     data = load_list(list_name)
     data.append({"name": name, "category": category.value})
     save_list(list_name, data)
-    await interaction.response.send_message(f"✅ Added '{name}' to '{list_name}'.", ephemeral=True)
+    await interaction.response.send_message(
+        f"✅ Added '{name}' to '{list_name}'.", ephemeral=True
+    )
 
 
 @bot.tree.command(name="remove_name", description="Remove an entry from a list")
 @app_commands.describe(list_name="Which list", name="Entry to remove")
-async def remove_name(interaction: discord.Interaction, list_name: str, name: str):
+async def remove_name(
+    interaction: discord.Interaction,
+    list_name: str,
+    name: str
+):
     if not list_exists(list_name):
-        return await interaction.response.send_message(f"❌ List '{list_name}' not found.", ephemeral=True)
+        return await interaction.response.send_message(
+            f"❌ List '{list_name}' not found.", ephemeral=True
+        )
     data = [e for e in load_list(list_name) if e["name"].lower() != name.lower()]
     save_list(list_name, data)
-    await interaction.response.send_message(f"🗑️ Removed '{name}' from '{list_name}'.", ephemeral=True)
+    await interaction.response.send_message(
+        f"🗑️ Removed '{name}' from '{list_name}'.", ephemeral=True
+    )
 
 
 @bot.tree.command(name="edit_name", description="Edit an entry in a list")
@@ -135,7 +156,9 @@ async def edit_name(
     new_category: app_commands.Choice[str]
 ):
     if not list_exists(list_name):
-        return await interaction.response.send_message(f"❌ List '{list_name}' not found.", ephemeral=True)
+        return await interaction.response.send_message(
+            f"❌ List '{list_name}' not found.", ephemeral=True
+        )
     data = load_list(list_name)
     for e in data:
         if e["name"].lower() == old_name.lower():
@@ -143,16 +166,25 @@ async def edit_name(
             e["category"] = new_category.value
             break
     save_list(list_name, data)
-    await interaction.response.send_message(f"✏️ Updated '{old_name}'.", ephemeral=True)
+    await interaction.response.send_message(
+        f"✏️ Updated '{old_name}'.", ephemeral=True
+    )
 
 
 @bot.tree.command(name="delete_list", description="Delete an entire list")
 @app_commands.describe(name="Name of the list to delete")
-async def delete_list_cmd(interaction: discord.Interaction, name: str):
+async def delete_list_cmd(
+    interaction: discord.Interaction,
+    name: str
+):
     if not list_exists(name):
-        return await interaction.response.send_message(f"⚠️ List '{name}' not found.", ephemeral=True)
+        return await interaction.response.send_message(
+            f"⚠️ List '{name}' not found.", ephemeral=True
+        )
     delete_list(name)
-    await interaction.response.send_message(f"🗑️ Deleted list '{name}'.", ephemeral=True)
+    await interaction.response.send_message(
+        f"🗑️ Deleted list '{name}'.", ephemeral=True
+    )
 
 
 # ━━━ Inline Timer in List ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -172,7 +204,9 @@ async def add_timer_to_list(
     minutes: int
 ):
     if not list_exists(list_name):
-        return await interaction.response.send_message(f"❌ List '{list_name}' not found.", ephemeral=True)
+        return await interaction.response.send_message(
+            f"❌ List '{list_name}' not found.", ephemeral=True
+        )
     total = hours * 3600 + minutes * 60
     entry = {
         "name": name,
@@ -183,7 +217,9 @@ async def add_timer_to_list(
     data = load_list(list_name)
     data.append(entry)
     save_list(list_name, data)
-    await interaction.response.send_message(f"⏳ Timer '{name}' added to '{list_name}'.", ephemeral=True)
+    await interaction.response.send_message(
+        f"⏳ Timer '{name}' added to '{list_name}'.", ephemeral=True
+    )
 
 
 # ━━━ Dashboard Display ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -196,14 +232,18 @@ async def lists(interaction: discord.Interaction, name: str):
         embed = build_embed(name)
         dash  = get_dashboard_id(name)
         if dash:
-            ch = interaction.guild.get_channel(dash["channel_id"])
-            try:
-                msg = await ch.fetch_message(dash["message_id"])
-                await msg.edit(embed=embed)
-                return await interaction.response.send_message(f"✅ Refreshed '{name}'.", ephemeral=True)
-            except:
-                pass
-        # No dashboard recorded
+            channel_id, message_id = dash
+            ch = interaction.guild.get_channel(channel_id)
+            if ch:
+                try:
+                    msg = await ch.fetch_message(message_id)
+                    await msg.edit(embed=embed)
+                    return await interaction.response.send_message(
+                        f"✅ Refreshed '{name}'.", ephemeral=True
+                    )
+                except:
+                    pass
+        # no existing dashboard
         await interaction.response.send_message(embed=embed)
         msg = await interaction.original_response()
         save_dashboard_id(name, msg.channel.id, msg.id)
@@ -212,23 +252,28 @@ async def lists(interaction: discord.Interaction, name: str):
     # Generator lists
     if name in get_all_gen_list_names():
         embed = build_gen_embed(name)
-        from data_manager import get_gen_dashboard_id, save_gen_dashboard_id  # local import to avoid circular
+        from data_manager import get_gen_dashboard_id, save_gen_dashboard_id
         dash = get_gen_dashboard_id(name)
         if dash:
-            ch = interaction.guild.get_channel(dash["channel_id"])
-            try:
-                msg = await ch.fetch_message(dash["message_id"])
-                await msg.edit(embed=embed)
-                return await interaction.response.send_message(f"✅ Refreshed gen '{name}'.", ephemeral=True)
-            except:
-                pass
+            channel_id, message_id = dash
+            ch = interaction.guild.get_channel(channel_id)
+            if ch:
+                try:
+                    msg = await ch.fetch_message(message_id)
+                    return await interaction.response.send_message(
+                        f"✅ Refreshed gen '{name}'.", embed=embed, ephemeral=True
+                    )
+                except:
+                    pass
         await interaction.response.send_message(embed=embed)
         msg = await interaction.original_response()
         save_gen_dashboard_id(name, msg.channel.id, msg.id)
         return
 
     # Not found
-    await interaction.response.send_message(f"❌ '{name}' not found.", ephemeral=True)
+    await interaction.response.send_message(
+        f"❌ '{name}' not found.", ephemeral=True
+    )
 
 
 # ━━━ Overview & Help ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -254,20 +299,16 @@ async def help_command(interaction: discord.Interaction):
         "/remove_name list_name:<list> name:<entry>\n"
         "/edit_name list_name:<list> old_name:<old> new_name:<new> new_category:<cat>\n"
         "/delete_list name:<list>\n\n"
-
         "/add_timer_to_list list_name:<list> name:<timer> hours:<int> minutes:<int>\n\n"
-
         "/create_timer name:<timer> hours:<int> minutes:<int>\n"
         "/pause_timer name:<timer>\n"
         "/resume_timer name:<timer>\n"
         "/delete_timer name:<timer>\n\n"
-
         "/create_generator_list name:<list>\n"
         "/add_generator list_name:<list> entry_name:<gen> gen_type:<Tek|Electrical> element:<int> shards:<int> gas:<int> imbued:<int>\n"
         "/edit_generator list_name:<list> old_name:<old> new_name:<new> element:<int> shards:<int> gas:<int> imbued:<int>\n"
         "/remove_generator list_name:<list> entry_name:<gen>\n"
         "/delete_generator_list name:<list>\n\n"
-
         "/lists name:<list>        – show or refresh any dashboard embed\n"
         "/list_all                – (Admin) list all list names\n"
     )
@@ -275,3 +316,4 @@ async def help_command(interaction: discord.Interaction):
 
 
 bot.run(TOKEN)
+
