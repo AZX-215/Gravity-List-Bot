@@ -4,16 +4,16 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 from dotenv import load_dotenv
+import asyncio
 
 from data_manager import (
     load_list, save_list, add_to_list, edit_entry, remove_entry,
-    delete_list, list_exists, save_dashboard_id, get_dashboard_id,
-    get_all_dashboards, get_list_hash
+    delete_list as dm_delete_list, list_exists, save_dashboard_id,
+    get_dashboard_id, get_all_dashboards, get_list_hash
 )
 from timers import setup as setup_timers
-import asyncio
 
-print("🔧 bot.py v11 (sync after setup_timers) loading…")
+print("🔧 bot.py v11 (descriptor fixes) loading…")
 load_dotenv()
 
 TOKEN     = os.getenv("DISCORD_TOKEN")
@@ -74,17 +74,18 @@ async def background_updater():
 
 @bot.event
 async def on_ready():
-    # first setup timers cog so create_timer command is registered
+    # Register timer commands first
     await setup_timers(bot)
-    # then sync all commands (including timers)
+    # Sync all commands
     synced = await bot.tree.sync()
     print(f"🔄 Synced {len(synced)} commands")
     print(f"✅ Bot is ready as {bot.user}")
     bot.loop.create_task(background_updater())
 
 # ---- List Commands ----
+
 @bot.tree.command(name="create_list", description="Create a new list")
-@app_commands.describe(name="Name of list")
+@app_commands.describe(name="Name of the new list")
 async def create_list(interaction: discord.Interaction, name: str):
     if list_exists(name):
         return await interaction.response.send_message(f"⚠️ List '{name}' exists", ephemeral=True)
@@ -92,7 +93,7 @@ async def create_list(interaction: discord.Interaction, name: str):
     await interaction.response.send_message(f"✅ List '{name}' created.", ephemeral=True)
 
 @bot.tree.command(name="add_name", description="Add a name to a list")
-@app_commands.describe(list_name="List", name="Entry", category="Category")
+@app_commands.describe(list_name="Which list to add to", name="Entry to add", category="Category")
 @app_commands.choices(category=[
     app_commands.Choice(name="Enemy", value="Enemy"),
     app_commands.Choice(name="Friend", value="Friend"),
@@ -102,22 +103,22 @@ async def create_list(interaction: discord.Interaction, name: str):
 ])
 async def add_name(interaction: discord.Interaction, list_name: str, name: str, category: app_commands.Choice[str]):
     if not list_exists(list_name):
-        return await interaction.response.send_message("❌ List not found", ephemeral=True)
+        return await interaction.response.send_message(f"❌ List '{list_name}' not found", ephemeral=True)
     add_to_list(list_name, name, category.value)
     await interaction.response.send_message(f"✅ Added '{name}' as '{category.value}'", ephemeral=True)
     await update_dashboard(list_name, interaction)
 
 @bot.tree.command(name="remove_name", description="Remove an entry from a list")
-@app_commands.describe(list_name="List", name="Entry")
+@app_commands.describe(list_name="Which list", name="Entry to remove")
 async def remove_name(interaction: discord.Interaction, list_name: str, name: str):
     if not list_exists(list_name):
-        return await interaction.response.send_message("❌ List not found", ephemeral=True)
+        return await interaction.response.send_message(f"❌ List '{list_name}' not found", ephemeral=True)
     remove_entry(list_name, name)
     await interaction.response.send_message(f"🗑️ Removed '{name}'", ephemeral=True)
     await update_dashboard(list_name, interaction)
 
-@bot.tree.command(name="edit_name", description="Edit an entry's name/category")
-@app_commands.describe(list_name="List", old_name="Existing entry", new_name="New entry", new_category="Category")
+@bot.tree.command(name="edit_name", description="Edit an entry's name and category")
+@app_commands.describe(list_name="Which list", old_name="Existing entry", new_name="New entry", new_category="New category")
 @app_commands.choices(new_category=[
     app_commands.Choice(name="Enemy", value="Enemy"),
     app_commands.Choice(name="Friend", value="Friend"),
@@ -127,21 +128,21 @@ async def remove_name(interaction: discord.Interaction, list_name: str, name: st
 ])
 async def edit_name(interaction: discord.Interaction, list_name: str, old_name: str, new_name: str, new_category: app_commands.Choice[str]):
     if not list_exists(list_name):
-        return await interaction.response.send_message("❌ List not found", ephemeral=True)
+        return await interaction.response.send_message(f"❌ List '{list_name}' not found", ephemeral=True)
     edit_entry(list_name, old_name, new_name, new_category.value)
     await interaction.response.send_message(f"✏️ Updated '{old_name}' to '{new_name}'", ephemeral=True)
     await update_dashboard(list_name, interaction)
 
 @bot.tree.command(name="delete_list", description="Delete an entire list")
-@app_commands.describe(name="List")
+@app_commands.describe(list_name="List to delete")
 async def delete_list_cmd(interaction: discord.Interaction, list_name: str):
     if not list_exists(list_name):
-        return await interaction.response.send_message("❌ List not found", ephemeral=True)
-    delete_list(list_name)
-    await interaction.response.send_message(f"🗑️ Deleted '{list_name}'", ephemeral=True)
+        return await interaction.response.send_message(f"❌ List '{list_name}' not found", ephemeral=True)
+    dm_delete_list(list_name)
+    await interaction.response.send_message(f"🗑️ Deleted list '{list_name}'", ephemeral=True)
 
 @bot.tree.command(name="list", description="Show or create dashboard for a list")
-@app_commands.describe(list_name="List")
+@app_commands.describe(list_name="Which list to display")
 async def list_dashboard(interaction: discord.Interaction, list_name: str):
     embed = build_embed(list_name)
     dash = get_dashboard_id(list_name)
@@ -155,7 +156,7 @@ async def list_dashboard(interaction: discord.Interaction, list_name: str):
         try:
             msg = await channel.fetch_message(message_id)
             await msg.edit(embed=embed)
-            await interaction.response.send_message("✅ Dashboard updated", ephemeral=True)
+            await interaction.response.send_message("✅ Dashboard updated.", ephemeral=True)
         except (discord.NotFound, discord.Forbidden):
             await interaction.response.send_message(embed=embed)
             msg = await interaction.original_response()
