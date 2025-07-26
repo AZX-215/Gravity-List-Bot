@@ -15,34 +15,41 @@ class TimerCog(commands.Cog):
     def cog_unload(self):
         self.timer_loop.cancel()
 
-    def build_timer_embed(self, data):
-        now = time.time()
-        if data.get("paused", False):
-            remaining = data.get("remaining_time", 0)
-            status    = "⏸️ Paused"
-            color     = 0xFFD700
+def build_timer_embed(self, data):
+    now = time.time()
+    if data.get("paused", False):
+        remaining = data.get("remaining_time", 0)
+        status    = "⏸️ Paused"
+        color     = 0xFFD700
+    else:
+        remaining = data["end_time"] - now
+        if remaining > 0:
+            status = "⏳ Running"
+            color  = 0x00FF00
         else:
-            remaining = data["end_time"] - now
-            if remaining > 0:
-                status = "⏳ Running"
-                color  = 0x00FF00
-            else:
-                remaining = 0
-                status    = "✅ Expired"
-                color     = 0xFF0000
-        hrs, rem = divmod(int(remaining), 3600)
-        mins, sec= divmod(rem, 60)
-        timer_str= f"{hrs:02d}h {mins:02d}m {sec:02d}s"
-        embed = discord.Embed(
-            title=f"Timer: {data['name']}",
-            description=f"{status}\nRemaining: {timer_str}",
-            color=color
-        )
-        if data.get("role_id"):
-            embed.set_footer(text=f"Pings: <@&{data['role_id']}>")
-        elif data.get("owner_id"):
-            embed.set_footer(text=f"Pings: <@{data['owner_id']}>")
-        return embed
+            remaining = 0
+            status    = "✅ Expired"
+            color     = 0xFF0000
+    hrs, rem = divmod(int(remaining), 3600)
+    mins, sec= divmod(rem, 60)
+    timer_str= f"{hrs:02d}h {mins:02d}m {sec:02d}s"
+
+    # Title contains the timer name only
+    embed = discord.Embed(
+        title=f"Timer: {data['name']}",
+        color=color
+    )
+    # Status, emoji, and countdown on one line in description
+    embed.description = f"{status} — {timer_str}"
+
+    # Ping on its own footer line
+    if data.get("role_id"):
+        embed.set_footer(text=f"Pings: <@&{data['role_id']}>")
+    elif data.get("owner_id"):
+        embed.set_footer(text=f"Pings: <@{data['owner_id']}>")
+
+    return embed
+
 
     @app_commands.command(name="create_timer", description="Create a countdown timer")
     @app_commands.describe(name="Timer name", hours="Hours", minutes="Minutes", role="Role to ping when timer expires (optional)")

@@ -29,7 +29,8 @@ def build_gen_embed(list_name: str) -> discord.Embed:
             rem = max(0, int(item["timestamp"] + total_seconds - now))
             h, r = divmod(rem, 3600)
             m, s = divmod(r, 60)
-            timer_str = f"{h:02d}h {m:02d}m {s:02d}s | Element: {rem_element} | Shards: {rem_shards}"
+            # Everything on one line, with padding after emoji
+            timer_str = f"{emoji}   {item['name']} — {h:02d}h {m:02d}m {s:02d}s | Element: {rem_element} | Shards: {rem_shards}"
         else:
             # 1 gas = 1h (3600s), 1 imbued = 4h (14400s)
             total_seconds = item["gas"] * 3600 + item["imbued"] * 14400
@@ -41,9 +42,11 @@ def build_gen_embed(list_name: str) -> discord.Embed:
             rem = max(0, int(item["timestamp"] + total_seconds - now))
             h, r = divmod(rem, 3600)
             m, s = divmod(r, 60)
-            timer_str = f"{h:02d}h {m:02d}m {s:02d}s | Gas: {rem_gas} | Imbued: {rem_imbued}"
-        embed.add_field(name=f"{emoji} {item['name']}", value=timer_str, inline=False)
+            # Everything on one line, with padding after emoji
+            timer_str = f"{emoji}   {item['name']} — {h:02d}h {m:02d}m {s:02d}s | Gas: {rem_gas} | Imbued: {rem_imbued}"
+        embed.add_field(name=timer_str, value="\u200b", inline=False)
     return embed
+
 
 class GeneratorCog(commands.Cog):
     def __init__(self, bot: commands.Bot):

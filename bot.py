@@ -23,7 +23,7 @@ bot = commands.Bot(command_prefix="!", intents=intents, application_id=CLIENT_ID
 
 CATEGORY_EMOJIS = {
     "Owner": "👑", "Enemy": "🔴", "Friend": "🟢",
-    "Ally":   "🔵", "Bob":   "🟡", "Timer":"⏳"
+    "Ally":   "🔵", "Beta":   "🟡", "Timer":"⏳"
 }
 
 # Helper to push a list dashboard update if one exists
@@ -40,9 +40,12 @@ async def push_list_update(list_name):
                 print(f"Error updating dashboard {list_name}: {e}")
 
 def build_embed(list_name: str) -> discord.Embed:
-    """Embed for regular lists, including inline timers."""
+    """Embed for regular lists, including inline timers. Improved with spacing."""
     data = load_list(list_name)
     embed = discord.Embed(title=f"{list_name} List", color=0x808080)
+    # Add extra space under the title
+    embed.add_field(name="\u200b", value="\u200b", inline=False)  # Blank line for breathing room
+
     now = time.time()
     for item in data:
         if item.get("category") == "Timer":
@@ -51,11 +54,14 @@ def build_embed(list_name: str) -> discord.Embed:
             rem   = max(0, int(start + dur - now))
             h, r  = divmod(rem, 3600)
             m, s  = divmod(r, 60)
-            name_field = f"⏳ {item['name']} — {h:02d}h {m:02d}m {s:02d}s"
+            # Add extra spaces after emoji for visual padding
+            name_field = f"⏳   {item['name']} — {h:02d}h {m:02d}m {s:02d}s"
         else:
-            name_field = f"{CATEGORY_EMOJIS.get(item['category'],'')} {item['name']}"
+            # Add extra spaces after emoji for visual padding
+            name_field = f"{CATEGORY_EMOJIS.get(item['category'],'')}   {item['name']}"
         embed.add_field(name=name_field, value="\u200b", inline=False)
     return embed
+
 
 @bot.event
 async def on_ready():
