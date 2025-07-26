@@ -1,4 +1,3 @@
-
 import time
 import discord
 from discord.ext import commands, tasks
@@ -17,14 +16,41 @@ def build_gen_embed(list_name: str) -> discord.Embed:
     for item in data:
         emoji = GEN_EMOJIS.get(item["type"], "")
         if item["type"] == "Tek":
-            dur = item["element"] * 18*3600 + item["shards"] * 600
-        else:
-            dur = item["gas"] * 3600 + item["imbued"] * 4*3600
-        rem = max(0, int(item["timestamp"] + dur - now))
-        h, r = divmod(rem, 3600)
-        m, s = divmod(r, 60)
-        timer_str = f"{h:02d}h {m:02d}m {s:02d}s"
-        embed.add_field(name=f"{emoji} {item['name']}", value=timer_str, inline=False)
+            total_secs = item["element"] * 18*3600 + item["shards"] * 648  # 100 shards = 18 hours, so 1 shard = 648s
+            rem_secs = max(0, int(item["timestamp"] + total_secs - now))
+
+            # Calculate remaining element/shards
+            elapsed = max(0, now - item["timestamp"])
+            shards_used = min(item["shards"], int(elapsed // 648))
+            elapsed -= shards_used * 648
+            element_used = min(item["element"], int(elapsed // (18*3600)))
+            shards_left = item["shards"] - shards_used
+            element_left = item["element"] - element_used
+
+            h, r = divmod(rem_secs, 3600)
+            m, s = divmod(r, 60)
+            timer_str = f"{h:02d}h {m:02d}m {s:02d}s"
+            fuel_str = f"{element_left} Element, {shards_left} Shards"
+        else:  # Electrical
+            total_secs = item["gas"] * 3600 + item["imbued"] * 4*3600
+            rem_secs = max(0, int(item["timestamp"] + total_secs - now))
+
+            elapsed = max(0, now - item["timestamp"])
+            imbued_used = min(item["imbued"], int(elapsed // (4*3600)))
+            elapsed -= imbued_used * 4*3600
+            gas_used = min(item["gas"], int(elapsed // 3600))
+            imbued_left = item["imbued"] - imbued_used
+            gas_left = item["gas"] - gas_used
+
+            h, r = divmod(rem_secs, 3600)
+            m, s = divmod(r, 60)
+            timer_str = f"{h:02d}h {m:02d}m {s:02d}s"
+            fuel_str = f"{gas_left} Gas, {imbued_left} Imbued"
+        embed.add_field(
+            name=f"{emoji} {item['name']}",
+            value=f"{timer_str}\nFuel Left: {fuel_str}",
+            inline=False
+        )
     return embed
 
 class GeneratorCog(commands.Cog):
@@ -36,7 +62,7 @@ class GeneratorCog(commands.Cog):
     def cog_unload(self):
         self.generator_list_loop.cancel()
 
-    @tasks.loop(seconds=2)
+    @tasks.loop(minutes=2)  # UPDATED: refresh every 2 minutes
     async def generator_list_loop(self):
         for name, dash in get_all_gen_dashboards().items():
             channel = self.bot.get_channel(dash["channel_id"])
