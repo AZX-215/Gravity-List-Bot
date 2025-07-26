@@ -17,8 +17,15 @@
   - Instantly on `/add_name`, `/remove_name`, `/edit_name`.
   - Periodically (every minute) in the background.
 - **Real‑time countdown timers:** `/create_timer`, `/pause_timer`, `/resume_timer`, `/delete_timer` with per‑second updates.
-- **Generator timers (Ark Ascended):** Track Tek and Electrical generator runtimes with `/create_generator_list`, `/add_generator`, `/list_generators`, `/delete_generator_list`.
-- **Universal list overview:** `/list_all` shows all lists (regular and generator) alphabetically, admin‑only.
+- **Generator timers (Ark Ascended):** Track Tek and Electrical generator runtimes with:
+  - `/create_generator_list`
+  - `/add_generator`
+  - `/edit_generator`
+  - `/remove_generator`
+  - `/delete_generator_list`
+  - Unified display via `/lists`
+- **Unified display:** `/lists` shows or updates a dashboard for any regular or generator list.
+- **Universal list overview:** `/list_all` shows all list names alphabetically (regular & generator), admin‑only.
 - **Persistent JSON storage:** All data under `lists/` (including `generator_lists/`) survives redeploys via a mounted volume.
 - **Railway‑deployable:** Dockerfile and environment variable setup for easy hosting.
 
@@ -28,16 +35,16 @@
 
 ### List Commands
 
-| Command                                                                                 | Description                                          |
-|-----------------------------------------------------------------------------------------|------------------------------------------------------|
-| `/create_list name:<list>`                                                              | Create a new list                                    |
-| `/add_name list_name:<list> name:<entry> category:<cat>`                               | Add an entry with category emoji to a list           |
-| `/remove_name list_name:<list> name:<entry>`                                           | Remove an entry from a list                          |
-| `/edit_name list_name:<list> old_name:<old> new_name:<new> new_category:<cat>`         | Edit an entry’s name and/or category                 |
-| `/delete_list list_name:<list>`                                                         | Delete an entire list                                |
-| `/list list_name:<list>`                                                                | Show or refresh the dashboard embed for a list       |
-| `/list_all` _(Admin only)_                                                              | List all regular and generator lists alphabetically  |
-| `/help`                                                                                 | Show usage instructions                              |
+| Command                                                                 | Description                                          |
+|-------------------------------------------------------------------------|------------------------------------------------------|
+| `/create_list name:<list>`                                              | Create a new regular list                            |
+| `/add_name list_name:<list> name:<entry> category:<cat>`               | Add an entry with category emoji to a regular list   |
+| `/remove_name list_name:<list> name:<entry>`                           | Remove an entry from a regular list                  |
+| `/edit_name list_name:<list> old_name:<old> new_name:<new> new_category:<cat>` | Edit an entry’s name and/or category in a regular list |
+| `/delete_list name:<list>`                                              | Delete an entire regular list                        |
+| `/lists name:<list>`                                                    | Show or update the dashboard for any list (regular or generator) |
+| `/list_all` _(Admin only)_                                              | List all regular and generator list names alphabetically |
+| `/help`                                                                 | Show usage instructions                              |
 
 ### Timer Commands
 
@@ -54,14 +61,15 @@ Timers update **every second**, and remain visible as expired timers until delet
 
 | Command                                                                                                                           | Description                                                      |
 |-----------------------------------------------------------------------------------------------------------------------------------|------------------------------------------------------------------|
-| `/create_generator_list name:<list>`                                                                                              | Create a new generator list                                       |
-| `/add_generator list_name:<list> entry_name:<name> gen_type:<Tek/Electrical> element:<int> shards:<int> gas:<int> imbued:<int>`  | Add a generator entry with fuel amounts to a generator list        |
-| `/list_generators name:<list>`                                                                                                    | Show or refresh the generator dashboard for a generator list     |
+| `/create_generator_list name:<list>`                                                                                              | Create a new generator list                                      |
+| `/add_generator list_name:<list> entry_name:<name> gen_type:<Tek/Electrical> element:<int> shards:<int> gas:<int> imbued:<int>`  | Add a generator entry with fuel amounts to a generator list      |
+| `/edit_generator list_name:<list> old_name:<old> new_name:<new> element:<int> shards:<int> gas:<int> imbued:<int>`                | Edit an existing generator entry                                 |
+| `/remove_generator list_name:<list> entry_name:<name>`                                                                            | Remove a generator entry from a generator list                   |
 | `/delete_generator_list name:<list>`                                                                                              | Delete an entire generator list                                  |
 
 Generator runtimes use fixed rates:
-- Tek: 1 Element = 18 h, 1 Shard = 10 m
-- Electrical: 1 Gas = 1 h, 1 Element Imbued Gas = 4 h
+- **Tek:** 1 Element = 18 h, 1 Shard = 10 m
+- **Electrical:** 1 Gas = 1 h, 1 Element Imbued Gas = 4 h
 
 ---
 

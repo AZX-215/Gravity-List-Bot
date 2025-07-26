@@ -16,8 +16,7 @@ def _ensure_dir(path):
     if base and not os.path.exists(base):
         os.makedirs(base, exist_ok=True)
 
-# --- Standard list management ---
-
+# Standard list management
 def _get_list_path(list_name):
     _ensure_dir(DATABASE_PATH)
     base = os.path.dirname(DATABASE_PATH)
@@ -49,8 +48,7 @@ def get_all_list_names():
     names = [f[:-5] for f in os.listdir(base) if f.endswith(".json")]
     return sorted(names)
 
-# --- Standard dashboards ---
-
+# Standard dashboards
 def _load_dashboards():
     _ensure_dir(DASHBOARDS_PATH)
     if os.path.exists(DASHBOARDS_PATH):
@@ -78,8 +76,7 @@ def get_dashboard_id(list_name):
 def get_all_dashboards():
     return _load_dashboards()
 
-# --- Timer management ---
-
+# Timer management
 def load_timers():
     _ensure_dir(TIMERS_PATH)
     if os.path.exists(TIMERS_PATH):
@@ -103,8 +100,7 @@ def remove_timer(timer_id):
         timers.pop(timer_id)
         save_timers(timers)
 
-# --- Generator list management ---
-
+# Generator list management
 def _get_gen_list_path(list_name):
     _ensure_dir(GEN_LISTS_DIR + "/.placeholder")
     return os.path.join(GEN_LISTS_DIR, f"{list_name}.json")
@@ -150,8 +146,7 @@ def add_to_gen_list(list_name, entry_name, gen_type, element, shards, gas, imbue
     })
     save_gen_list(list_name, data)
 
-# --- Generator dashboards ---
-
+# Generator dashboards
 def _load_gen_dashboards():
     _ensure_dir(GEN_DASHBOARDS_PATH)
     if os.path.exists(GEN_DASHBOARDS_PATH):
@@ -179,8 +174,7 @@ def get_gen_dashboard_id(list_name):
 def get_all_gen_dashboards():
     return _load_gen_dashboards()
 
-# --- Hashing ---
-
+# Hashing
 def get_list_hash(list_name):
     return hashlib.md5(json.dumps(load_list(list_name), sort_keys=True).encode()).hexdigest()
 
