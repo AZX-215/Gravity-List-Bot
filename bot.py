@@ -40,36 +40,38 @@ async def push_list_update(list_name):
                 print(f"Error updating dashboard {list_name}: {e}")
 
 def build_embed(list_name: str) -> discord.Embed:
-    """Embed for regular lists, including inline timers. Improved with spacing."""
+    """Embed for regular lists, including inline timers, header, and custom bullets."""
     data = load_list(list_name)
     embed = discord.Embed(title=f"{list_name} List", color=0x808080)
-    # Add extra space under the title
-    embed.add_field(name="\u200b", value="\u200b", inline=False)  # Blank line for breathing room
+    embed.add_field(name="\u200b", value="\u200b", inline=False)  # Top padding
 
     now = time.time()
+    # Sort order: Header (1), Others (2), Text (3)
+    data.sort(key=lambda x: 1 if x.get("category") == "Header" else 3 if x.get("category") == "Text" else 2)
+
     for item in data:
-        if item.get("category") == "Timer":
+        category = item.get("category")
+        if category == "Header":
+            embed.add_field(name="\u200b", value=f"**{item['name']}**", inline=False)
+        elif category == "Text":
+            embed.add_field(name=f"• {item['name']}", value="\u200b", inline=False)
+        elif category == "Timer":
             start = item["timer_start"]
             dur   = item["timer_duration"]
             rem   = max(0, int(start + dur - now))
             h, r  = divmod(rem, 3600)
             m, s  = divmod(r, 60)
-            # Add extra spaces after emoji for visual padding
             name_field = f"⏳   {item['name']} — {h:02d}h {m:02d}m {s:02d}s"
+            embed.add_field(name=name_field, value="\u200b", inline=False)
         else:
-            # Add extra spaces after emoji for visual padding
-            name_field = f"{CATEGORY_EMOJIS.get(item['category'],'')}   {item['name']}"
-        embed.add_field(name=name_field, value="\u200b", inline=False)
+            name_field = f"{CATEGORY_EMOJIS.get(category,'')}   {item['name']}"
+            embed.add_field(name=name_field, value="\u200b", inline=False)
     return embed
-
 
 @bot.event
 async def on_ready():
-    # start standalone timers Cog (1s updates)
     await setup_timers(bot)
-    # start generator Cog (2m updates, or whatever you have set)
     await setup_gen_timers(bot)
-    # sync slash commands
     await bot.tree.sync()
     print(f"Bot ready. Commands synced for {bot.user}")
 
@@ -216,6 +218,30 @@ async def add_timer_to_list(
     )
     await push_list_update(list_name)
 
+# ━━━ Custom Header and Text Commands ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+@bot.tree.command(name="add_text", description="Add a bullet point note at the bottom of a list")
+@app_commands.describe(list_name="Which list", text="Bullet text comment")
+async def add_text(interaction: discord.Interaction, list_name: str, text: str):
+    if not list_exists(list_name):
+        return await interaction.response.send_message(f"❌ List '{list_name}' not found.", ephemeral=True)
+    data = load_list(list_name)
+    data.append({"name": text, "category": "Text"})
+    save_list(list_name, data)
+    await interaction.response.send_message(f"📝 Added text to '{list_name}'.", ephemeral=True)
+    await push_list_update(list_name)
+
+@bot.tree.command(name="add_header", description="Add or update a centered header at the top of a list")
+@app_commands.describe(list_name="Which list", header="Header text")
+async def add_header(interaction: discord.Interaction, list_name: str, header: str):
+    if not list_exists(list_name):
+        return await interaction.response.send_message(f"❌ List '{list_name}' not found.", ephemeral=True)
+    data = [e for e in load_list(list_name) if e.get("category") != "Header"]
+    data.insert(0, {"name": header, "category": "Header"})
+    save_list(list_name, data)
+    await interaction.response.send_message(f"🏷️ Set header for '{list_name}'.", ephemeral=True)
+    await push_list_update(list_name)
+
 # ━━━ Dashboard Display ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 @bot.tree.command(name="lists", description="Show or update any list dashboard")
@@ -303,6 +329,8 @@ async def help_command(interaction: discord.Interaction):
         "/delete_generator_list name:<list>\n\n"
         "/lists name:<list>        - show or refresh any dashboard embed\n"
         "/list_all                - (Admin) list all list names\n"
+        "/add_header list_name:<list> header:<text>  - add a centered header\n"
+        "/add_text list_name:<list> text:<text>      - add a bullet note at the bottom\n"
     )
     await interaction.response.send_message(help_text, ephemeral=True)
 

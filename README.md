@@ -11,6 +11,10 @@
 
 ## 📦 Key Features
 
+9. **Custom Header & Notes**
+   - `/add_header` adds a centered bold title to the top of any list
+   - `/add_text` adds a freeform bullet comment to the bottom of any list
+
 1. **Categorized Lists**  
    - Create, add, edit, remove, delete entries with emojis: 👑 Owner | 🔴 Enemy | 🟢 Friend | 🔵 Ally | 🟡 Beta  
    - Inline timers in lists: ⏳ entries count down live
