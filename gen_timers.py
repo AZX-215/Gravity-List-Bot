@@ -53,40 +53,55 @@ class GeneratorCog(commands.Cog):
     def cog_unload(self):
         self.generator_list_loop.cancel()
 
-    @tasks.loop(minutes=2)
-    async def generator_list_loop(self):
-        for name, dash in get_all_gen_dashboards().items():
-            channel = self.bot.get_channel(dash[0]) if dash else None  # FIXED tuple index
-            if not channel:
-                continue
-            try:
-                msg = await channel.fetch_message(dash[1])  # FIXED tuple index
-                await msg.edit(embed=build_gen_embed(name))
-            except Exception as e:
-                print(f"[GenTimer Dashboard] Error: {e}")
+@tasks.loop(minutes=2)
+async def generator_list_loop(self):
+    # 1. Update dashboards
+    for name, dash in get_all_gen_dashboards().items():
+        channel = None
+        message_id = None
+        if dash:
+            if isinstance(dash, (tuple, list)):
+                channel = self.bot.get_channel(dash[0])
+                message_id = dash[1]
+            elif isinstance(dash, dict):
+                channel = self.bot.get_channel(dash.get("channel_id"))
+                message_id = dash.get("message_id")
+        if not channel or not message_id:
+            continue
+        try:
+            msg = await channel.fetch_message(message_id)
+            await msg.edit(embed=build_gen_embed(name))
+        except Exception as e:
+            print(f"[GenTimer Dashboard] Error: {e}")
 
-        # Expiry ping logic
-        now = time.time()
-        for list_name in get_all_gen_list_names():
-            data = load_gen_list(list_name)
-            ping_role = get_gen_list_role(list_name)
-            dash = get_gen_dashboard_id(list_name)
-            channel = self.bot.get_channel(dash[0]) if dash else None  # FIXED tuple index
-            for item in data:
-                if not item.get("expired"):
-                    if item["type"] == "Tek":
-                        dur = item["element"] * 64800 + item["shards"] * 648
-                    else:
-                        dur = item["gas"] * 3600 + item["imbued"] * 14400
-                    if now > item["timestamp"] + dur:
-                        item["expired"] = True
-                        mention = f"<@&{ping_role}>" if ping_role else ""
-                        if channel:
-                            try:
-                                await channel.send(f"⚡ Generator **{item['name']}** expired! {mention}")
-                            except Exception as e:
-                                print(f"[GenTimer Ping] Error: {e}")
-            save_gen_list(list_name, data)
+    # 2. Expiry ping logic
+    now = time.time()
+    for list_name in get_all_gen_list_names():
+        data = load_gen_list(list_name)
+        ping_role = get_gen_list_role(list_name)
+        dash = get_gen_dashboard_id(list_name)
+        channel = None
+        if dash:
+            if isinstance(dash, (tuple, list)):
+                channel = self.bot.get_channel(dash[0])
+            elif isinstance(dash, dict):
+                channel = self.bot.get_channel(dash.get("channel_id"))
+        for item in data:
+            if not item.get("expired"):
+                if item["type"] == "Tek":
+                    dur = item["element"] * 64800 + item["shards"] * 648
+                else:
+                    dur = item["gas"] * 3600 + item["imbued"] * 14400
+                if now > item["timestamp"] + dur:
+                    item["expired"] = True
+                    mention = f"<@&{ping_role}>" if ping_role else ""
+                    if channel:
+                        try:
+                            await channel.send(f"⚡ Generator **{item['name']}** expired! {mention}")
+                        except Exception as e:
+                            print(f"[GenTimer Ping] Error: {e}")
+        save_gen_list(list_name, data)
+
 
     @app_commands.command(name="create_generator_list", description="Create a new generator timer list")
     @app_commands.describe(name="Name of the generator list", role="Role to ping if any generator timer expires")
