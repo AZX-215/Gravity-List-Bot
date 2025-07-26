@@ -16,7 +16,6 @@ from data_manager import (
 )
 from timers import setup as setup_timers
 
-print("🔧 bot.py v14 (unified `/lists`) loading…")
 load_dotenv()
 TOKEN = os.getenv("DISCORD_TOKEN")
 CLIENT_ID = int(os.getenv("CLIENT_ID"))
@@ -25,15 +24,26 @@ intents = discord.Intents.default()
 intents.guilds = True
 bot = commands.Bot(command_prefix="!", intents=intents, application_id=CLIENT_ID)
 
-CATEGORY_EMOJIS = {"Owner":"👑","Enemy":"🔴","Friend":"🟢","Ally":"🔵","Bob":"🟡"}
+CATEGORY_EMOJIS = {"Owner":"👑","Enemy":"🔴","Friend":"🟢","Ally":"🔵","Bob":"🟡","Timer":"⏳"}
 GEN_EMOJIS = {"Tek":"🔄","Electrical":"⛽"}
 
 def build_embed(list_name: str) -> discord.Embed:
     data = load_list(list_name)
     embed = discord.Embed(title=f"{list_name} List", color=0x808080)
+    now = time.time()
     for item in data:
-        emoji = CATEGORY_EMOJIS.get(item["category"], "")
-        embed.add_field(name=f"{emoji} {item['name']}", value=" ", inline=False)
+        if item.get("category") == "Timer":
+            start = item.get("timer_start", now)
+            duration = item.get("timer_duration", 0)
+            remaining = max(0, int(start + duration - now))
+            hrs, rem = divmod(remaining, 3600)
+            mins, secs = divmod(rem, 60)
+            timer_str = f"{hrs:02d}h {mins:02d}m {secs:02d}s"
+            name = f"⏳ {item['name']} — {timer_str}"
+        else:
+            emoji = CATEGORY_EMOJIS.get(item["category"], "")
+            name = f"{emoji} {item['name']}"
+        embed.add_field(name=name, value=" ", inline=False)
     return embed
 
 def build_gen_embed(list_name: str) -> discord.Embed:
@@ -43,11 +53,10 @@ def build_gen_embed(list_name: str) -> discord.Embed:
     for item in data:
         emoji = GEN_EMOJIS.get(item["type"], "")
         if item["type"] == "Tek":
-            duration = item["element"]*18*3600 + item["shards"]*600
+            duration = item["element"] * 18 * 3600 + item["shards"] * 600
         else:
-            duration = item["gas"]*3600 + item["imbued"]*4*3600
-        start = item["timestamp"]
-        remaining = max(0, int(start + duration - now))
+            duration = item["gas"] * 3600 + item["imbued"] * 4 * 3600
+        remaining = max(0, int(item["timestamp"] + duration - now))
         hrs, rem = divmod(remaining, 3600)
         mins, secs = divmod(rem, 60)
         timer_str = f"{hrs:02d}h {mins:02d}m {secs:02d}s"
@@ -86,18 +95,43 @@ async def background_updater():
 async def on_ready():
     await setup_timers(bot)
     await bot.tree.sync()
-    print(f"🔄 Synced commands for {bot.user}")
+    print(f"Bot ready. Commands synced for {bot.user}")
     bot.loop.create_task(background_updater())
 
-# ---- List Commands ----
-@bot.tree.command(name="create_list", description="Create a new list")
-@app_commands.describe(name="Name of the new list")
-async def create_list(interaction: discord.Interaction, name: str):
-    if list_exists(name):
-        return await interaction.response.send_message(f"⚠️ '{name}' exists", ephemeral=True)
-    save_list(name, [])
-    await interaction.response.send_message(f"✅ Created list '{name}'", ephemeral=True)
+# Regular lists...
 
-# ... [the rest of the v14 content] ...
+@bot.tree.command(name="add_timer_to_list", description="Add a timer entry into a regular list")
+@app_commands.describe(
+    list_name="Which list",
+    name="Timer name",
+    hours="Hours",
+    minutes="Minutes"
+)
+async def add_timer_to_list(interaction: discord.Interaction, list_name: str, name: str, hours: int, minutes: int):
+    if not list_exists(list_name):
+        return await interaction.response.send_message(f"❌ List '{list_name}' not found.", ephemeral=True)
+    total = hours * 3600 + minutes * 60
+    entry = {
+        "name": name,
+        "category": "Timer",
+        "timer_start": time.time(),
+        "timer_duration": total
+    }
+    data = load_list(list_name)
+    data.append(entry)
+    save_list(list_name, data)
+    await interaction.response.send_message(f"⏳ Timer '{name}' added to '{list_name}'.", ephemeral=True)
+    dash = get_dashboard_id(list_name)
+    if dash:
+        ch_id, msg_id = dash
+        channel = interaction.guild.get_channel(ch_id)
+        if channel:
+            try:
+                msg = await channel.fetch_message(msg_id)
+                await msg.edit(embed=build_embed(list_name))
+            except:
+                pass
+
+# (Other commands unchanged)
 
 bot.run(TOKEN)
