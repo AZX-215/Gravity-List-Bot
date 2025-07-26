@@ -397,5 +397,34 @@ async def list_all(interaction: discord.Interaction):
     embed = discord.Embed(title="All Lists", description=desc, color=0x808080)
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
+@bot.tree.command(name="help", description="Show usage instructions")
+async def help_command(interaction: discord.Interaction):
+    help_text = (
+        "**Gravity List Bot Commands**\n\n"
+        "/create_list name:<list>\n"
+        "/add_name list_name:<list> name:<entry> category:<cat>\n"
+        "/remove_name list_name:<list> name:<entry>\n"
+        "/edit_name list_name:<list> old_name:<old> new_name:<new> new_category:<cat>\n"
+        "/delete_list name:<list>\n\n"
+
+        "/add_timer_to_list list_name:<list> name:<timer> hours:<int> minutes:<int>\n\n"
+
+        "/create_timer name:<timer> hours:<int> minutes:<int>\n"
+        "/pause_timer name:<timer>\n"
+        "/resume_timer name:<timer>\n"
+        "/delete_timer name:<timer>\n\n"
+
+        "/create_generator_list name:<list>\n"
+        "/add_generator list_name:<list> entry_name:<gen> gen_type:<Tek|Electrical> "
+            "element:<int> shards:<int> gas:<int> imbued:<int>\n"
+        "/edit_generator list_name:<list> old_name:<old> new_name:<new> "
+            "element:<int> shards:<int> gas:<int> imbued:<int>\n"
+        "/remove_generator list_name:<list> entry_name:<gen>\n"
+        "/delete_generator_list name:<list>\n\n"
+
+        "/lists name:<list>        – show or refresh any dashboard embed\n"
+        "/list_all                – (Admin) list all list names\n"
+    )
+    await interaction.response.send_message(help_text, ephemeral=True)
 
 bot.run(TOKEN)
