@@ -1,6 +1,5 @@
 import time
 import asyncio
-import random
 import datetime
 import discord
 from discord.ext import commands, tasks
@@ -19,18 +18,21 @@ from data_manager import (
     get_gen_list_role
 )
 
-GEN_EMOJIS = {"Tek": "🔧", "Electrical": "🔌"}
+# Thumbnails and colors
+TEK_THUMBNAIL = "https://raw.githubusercontent.com/AZX-215/Gravity-List-Bot/refs/heads/main/images/Tek_Generator.png"
+TEK_COLOR = 0x0099FF
+ELEC_COLOR = 0xFFC300
+GEN_EMOJIS = {"Tek": "⚡", "Electrical": "🔌"}
 
 def build_gen_embed(list_name: str) -> discord.Embed:
     data = load_gen_list(list_name)
     embed = discord.Embed(
-        title=f"⛽ {list_name} Dashboard",
-        color=0x1ABC9C,
+        title=f"{GEN_EMOJIS['Tek']} {list_name} Dashboard",
+        color=TEK_COLOR,
         timestamp=datetime.datetime.utcnow()
     )
-    embed.set_footer(text="Auto‑refresh every 5 min")
-    # Optional: set a thumbnail if you have a URL
-    # embed.set_thumbnail(url="https://your-cdn/azx-logo.png")
+    embed.set_footer(text="Gravity List Bot • Powered by AZX")
+    embed.set_thumbnail(url=TEK_THUMBNAIL)
 
     now = time.time()
     tek_items = [item for item in data if item["type"] == "Tek"]
@@ -45,11 +47,30 @@ def build_gen_embed(list_name: str) -> discord.Embed:
         elem_sec    = init_elem * 64800
         elapsed     = max(0, now - start)
 
-        rem_shards  = max(0, init_shards - int(elapsed / shard_sec)) if shard_sec > 0 else init_shards
-        rem_elem    = max(0, init_elem   - int((elapsed - (init_shards * shard_sec)) / elem_sec)) if elem_sec > 0 else init_elem
+        # Remaining
+        rem_shards  = max(0, init_shards - int(elapsed / 648)) if shard_sec > 0 else init_shards
+        rem_elem    = max(0, init_elem   - int((elapsed - (init_shards * 648)) / 64800)) if elem_sec > 0 else init_elem
 
-        end_ts = int(start + (init_shards * shard_sec) + (init_elem * elem_sec))
-        return f"**{item['name']}** {emoji}  <t:{end_ts}:R>\n• Element: {rem_elem}  │  Shards: {rem_shards}"
+        end_ts = int(start + (init_shards * 648) + (init_elem * 64800))
+        mins_left = int((end_ts - now) / 60)
+        # Determine status
+        if rem_elem == 0 and rem_shards == 0 or mins_left <= 0:
+            status_emoji = "❌"
+            status_text = "Offline"
+        elif rem_elem <= 5 or mins_left < 30:
+            status_emoji = "⚠️"
+            status_text = "Low Fuel"
+        else:
+            status_emoji = "🔋"
+            status_text = "Online"
+        # Format line
+        return (
+            f"**{emoji} {item['name']}**\n"
+            f"Element Left: **{rem_elem}**\n"
+            f"Shards Left: **{rem_shards}**\n"
+            f"⏳ Time Left: <t:{end_ts}:R>\n"
+            f"{status_emoji} Status: {status_text}"
+        )
 
     def format_elec(item):
         emoji = GEN_EMOJIS["Electrical"]
@@ -58,17 +79,36 @@ def build_gen_embed(list_name: str) -> discord.Embed:
         imbued = item.get("imbued", 0)
         dur = gas * 3600 + imbued * 14400
         elapsed = max(0, now - start)
-        rem = max(0, int(dur - elapsed))
+        rem_gas = max(0, gas - int(elapsed / 3600)) if gas > 0 else gas
+        rem_imbued = max(0, imbued - int(elapsed / 14400)) if imbued > 0 else imbued
         end_ts = int(start + dur)
-        return f"**{item['name']}** {emoji}  <t:{end_ts}:R>\n• Gas: {item['gas']}  │  Imbued: {item['imbued']}"
+        mins_left = int((end_ts - now) / 60)
+        # Determine status
+        if rem_gas == 0 and rem_imbued == 0 or mins_left <= 0:
+            status_emoji = "❌"
+            status_text = "Offline"
+        elif rem_gas <= 1 or mins_left < 60:
+            status_emoji = "⚠️"
+            status_text = "Low Fuel"
+        else:
+            status_emoji = "🔋"
+            status_text = "Online"
+        return (
+            f"**{emoji} {item['name']}**\n"
+            f"Gas Left: **{rem_gas}**\n"
+            f"Imbued: **{rem_imbued}**\n"
+            f"⏳ Time Left: <t:{end_ts}:R>\n"
+            f"{status_emoji} Status: {status_text}"
+        )
 
     # Add fields
     if tek_items:
         lines = [format_tek(it) for it in tek_items]
-        embed.add_field(name="⚙️ Tek Generators", value="\n\n".join(lines), inline=False)
+        embed.add_field(name="⚡ Tek Generators", value="\n\n".join(lines), inline=False)
     if elec_items:
+        # For visual separation, set color on field text itself
         lines = [format_elec(it) for it in elec_items]
-        embed.add_field(name="🔋 Electrical Generators", value="\n\n".join(lines), inline=False)
+        embed.add_field(name="🔌 Electrical Generators", value="\n\n".join(lines), inline=False)
 
     if not tek_items and not elec_items:
         embed.description = "No generators in this list."
@@ -132,8 +172,6 @@ class GeneratorCog(commands.Cog):
     @generator_list_loop.before_loop
     async def before_generator_loop(self):
         await self.bot.wait_until_ready()
-
-    # … include all existing slash commands here without changes …
 
     @app_commands.command(name="list_gen_lists", description="List all generator lists")
     async def list_gen_lists(self, interaction: discord.Interaction):
