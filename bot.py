@@ -51,7 +51,6 @@ def build_embed(list_name: str) -> discord.Embed:
     embed.add_field(name="\u200b", value="\u200b", inline=False)
 
     now = time.time()
-    # sort: Header → normal entries → Text
     data.sort(key=lambda x: 1 if x.get("category") == "Header"
                          else 3 if x.get("category") == "Text"
                          else 2)
@@ -60,10 +59,8 @@ def build_embed(list_name: str) -> discord.Embed:
         cat = item.get("category")
         if cat == "Header":
             embed.add_field(name="\u200b", value=f"**{item['name']}**", inline=False)
-
         elif cat == "Text":
             embed.add_field(name=f"• {item['name']}", value="\u200b", inline=False)
-
         elif cat == "Timer":
             end_ts = item.get("timer_end") or (item.get("timer_start",0) + item.get("timer_duration",0))
             rem = max(0, int(end_ts - now))
@@ -72,7 +69,6 @@ def build_embed(list_name: str) -> discord.Embed:
             m, s = divmod(r, 60)
             timestr = f"{d}d {h:02d}h {m:02d}m {s:02d}s" if d else f"{h:02d}h {m:02d}m {s:02d}s"
             embed.add_field(name=f"⏳   {item['name']} — {timestr}", value="\u200b", inline=False)
-
         else:
             name_fld = f"{CATEGORY_EMOJIS.get(cat,'')}   {item['name']}"
             embed.add_field(name=name_fld, value="\u200b", inline=False)
@@ -103,14 +99,13 @@ async def on_ready():
 async def list_dashboard_loop():
     for name in get_all_list_names():
         data = load_list(name)
-        if any(isinstance(item, dict) and item.get("category") == "Timer" for item in data):
+        if any(item.get("category") == "Timer" for item in data):
             try:
                 await push_list_update(name)
             except Exception as e:
                 print(f"[List Loop] Error updating {name}: {e}")
 
 # ━━━━━━ Slash Commands ━━━━━━━━━━
-
 @bot.tree.command(name="create_list", description="Create a new list")
 @app_commands.describe(name="Name of the new list")
 async def create_list(interaction: discord.Interaction, name: str):
@@ -146,7 +141,8 @@ async def help_command(interaction: discord.Interaction):
         "/create_gen_list name:<list>\n"
         "/add_gen tek list_name:<list> entry_name:<name> element:<int> shards:<int>\n"
         "/add_gen electrical list_name:<list> entry_name:<name> gas:<int> imbued:<int>\n"
-        "/edit_gen list_name:<list> old_name:<old> [--new_name:<new>] [--gen_type:<Tek|Electrical>] [--element:<int>] [--shards:<int>] [--gas:<int>] [--imbued:<int>]\n"
+        "/edit_gen list_name:<list> old_name:<old> [--new_name:<new>] [--gen_type:<Tek|Electrical>] "
+        "[--element:<int>] [--shards:<int>] [--gas:<int>] [--imbued:<int>]\n"
         "/remove_gen list_name:<list> name:<entry>\n"
         "/delete_gen_list name:<list>\n"
         "/set_gen_role list_name:<list> role:<@role>\n"
