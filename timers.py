@@ -3,72 +3,45 @@ import uuid
 import discord
 from discord.ext import commands, tasks
 from discord import app_commands
-from discord.app_commands import CommandAlreadyRegistered
 from data_manager import load_timers, add_timer, save_timers, remove_timer
-
-POLL_INTERVAL = 1  # update every second
 
 class TimerCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
-        self.timer_loop.start()
-        self.force_resync_loop.start()
+        self.expiration_loop.start()
 
     def cog_unload(self):
-        self.timer_loop.cancel()
-        self.force_resync_loop.cancel()
+        self.expiration_loop.cancel()
 
     def build_timer_embed(self, data):
-        now = time.time()
+        embed = discord.Embed(title=f"Timer: {data['name']}")
         if data.get("paused", False):
-            remaining = data.get("remaining_time", 0)
-            status    = "⏸️ Paused"
-            color     = 0xFFD700
+            remaining = int(data.get("remaining_time", 0))
+            hrs, rem = divmod(remaining, 3600)
+            mins, sec = divmod(rem, 60)
+            desc = f"⏸️ Paused — {hrs:02d}h{mins:02d}m{sec:02d}s"
+            embed.color = 0xFFD700
+        elif data.get("expired", False):
+            desc = "✅ Expired"
+            embed.color = 0xFF0000
         else:
-            remaining = data["end_time"] - now
-            if remaining > 0:
-                status = "⏳ Running"
-                color  = 0x00FF00
-            else:
-                remaining = 0
-                status    = "✅ Expired"
-                color     = 0xFF0000
+            end_ts = int(data["end_time"])
+            desc = f"⏳ Ends <t:{end_ts}:R>"
+            embed.color = 0x00FF00
 
-        hrs, rem = divmod(int(remaining), 3600)
-        mins, sec= divmod(rem, 60)
-        timer_str= f"{hrs:02d}h {mins:02d}m {sec:02d}s"
-
-        embed = discord.Embed(
-            title=f"Timer: {data['name']}",
-            color=color
-        )
-        embed.description = f"{status} — {timer_str}"
-
+        embed.description = desc
         if data.get("role_id"):
             embed.set_footer(text=f"Pings: <@&{data['role_id']}>")
         elif data.get("owner_id"):
             embed.set_footer(text=f"Pings: <@{data['owner_id']}>")
-
         return embed
 
     @app_commands.command(name="create_timer", description="Create a countdown timer")
-    @app_commands.describe(
-        name="Timer name",
-        hours="Hours",
-        minutes="Minutes",
-        role="Role to ping when timer expires (optional)"
-    )
-    async def create_timer(
-        self,
-        interaction: discord.Interaction,
-        name: str,
-        hours: int,
-        minutes: int,
-        role: discord.Role = None
-    ):
-        total   = hours * 3600 + minutes * 60
-        end_ts  = time.time() + total
-        tid     = str(uuid.uuid4())
+    @app_commands.describe(name="Timer name", hours="Hours", minutes="Minutes", role="Role to ping when timer expires")
+    async def create_timer(self, interaction: discord.Interaction, name: str, hours: int, minutes: int, role: discord.Role = None):
+        total = hours * 3600 + minutes * 60
+        end_ts = time.time() + total
+        tid = str(uuid.uuid4())
         timer_data = {
             "name": name,
             "end_time": end_ts,
@@ -91,10 +64,8 @@ class TimerCog(commands.Cog):
         timers = load_timers()
         for tid, data in timers.items():
             if data["name"].lower() == name.lower() and not data.get("paused", False):
-                remaining = data["end_time"] - time.time()
-                data["remaining_time"] = remaining
+                data["remaining_time"] = data["end_time"] - time.time()
                 data["paused"] = True
-                data.pop("end_time", None)
                 save_timers(timers)
                 channel = self.bot.get_channel(data["channel_id"])
                 if channel:
@@ -103,12 +74,8 @@ class TimerCog(commands.Cog):
                         await msg.edit(embed=self.build_timer_embed(data))
                     except:
                         pass
-                return await interaction.response.send_message(
-                    f"⏸️ Paused timer '{name}'", ephemeral=True
-                )
-        await interaction.response.send_message(
-            f"❌ No running timer named '{name}' found", ephemeral=True
-        )
+                return await interaction.response.send_message(f"⏸️ Paused timer '{name}'", ephemeral=True)
+        await interaction.response.send_message(f"❌ No running timer named '{name}' found", ephemeral=True)
 
     @app_commands.command(name="resume_timer", description="Resume a paused timer")
     @app_commands.describe(name="Name of timer to resume")
@@ -116,8 +83,7 @@ class TimerCog(commands.Cog):
         timers = load_timers()
         for tid, data in timers.items():
             if data["name"].lower() == name.lower() and data.get("paused", False):
-                remaining = data.get("remaining_time", 0)
-                data["end_time"] = time.time() + remaining
+                data["end_time"] = time.time() + data["remaining_time"]
                 data["paused"] = False
                 data.pop("remaining_time", None)
                 save_timers(timers)
@@ -128,12 +94,8 @@ class TimerCog(commands.Cog):
                         await msg.edit(embed=self.build_timer_embed(data))
                     except:
                         pass
-                return await interaction.response.send_message(
-                    f"▶️ Resumed timer '{name}'", ephemeral=True
-                )
-        await interaction.response.send_message(
-            f"❌ No paused timer named '{name}' found", ephemeral=True
-        )
+                return await interaction.response.send_message(f"▶️ Resumed timer '{name}'", ephemeral=True)
+        await interaction.response.send_message(f"❌ No paused timer named '{name}' found", ephemeral=True)
 
     @app_commands.command(name="delete_timer", description="Delete a timer")
     @app_commands.describe(name="Name of timer to delete")
@@ -142,79 +104,27 @@ class TimerCog(commands.Cog):
         for tid, data in list(timers.items()):
             if data["name"].lower() == name.lower():
                 remove_timer(tid)
-                return await interaction.response.send_message(
-                    f"🗑️ Deleted timer '{name}'", ephemeral=True
-                )
-        await interaction.response.send_message(
-            f"❌ No timer named '{name}' found", ephemeral=True
-        )
+                return await interaction.response.send_message(f"🗑️ Deleted timer '{name}'", ephemeral=True)
+        await interaction.response.send_message(f"❌ No timer named '{name}' found", ephemeral=True)
 
-    @app_commands.command(
-        name="resync_timers",
-        description="Force-refresh all timer messages (admin only)"
-    )
-    async def resync_timers(self, interaction: discord.Interaction):
-        if not interaction.user.guild_permissions.administrator:
-            return await interaction.response.send_message("❌ Admin only.", ephemeral=True)
-        timers = load_timers()
-        for tid, data in timers.items():
-            channel = self.bot.get_channel(data["channel_id"])
-            if channel:
-                try:
-                    msg = await channel.fetch_message(data["message_id"])
-                    await msg.edit(embed=self.build_timer_embed(data))
-                except:
-                    pass
-        await interaction.response.send_message("✅ Force-refreshed all timer displays.", ephemeral=True)
-
-    @tasks.loop(seconds=POLL_INTERVAL)
-    async def timer_loop(self):
+    @tasks.loop(minutes=1)
+    async def expiration_loop(self):
         if not self.bot.is_ready():
             return
         timers = load_timers()
+        now = time.time()
         changed = False
         for tid, data in timers.items():
-            channel = self.bot.get_channel(data["channel_id"])
-            expired = data.get("expired", False)
-            now = time.time()
-            if not expired and not data.get("paused", False) and now >= data["end_time"]:
-                data["expired"] = True
-                changed = True
-                ping = ""
-                if data.get("role_id"):
-                    ping = f"<@&{data['role_id']}>"
-                elif data.get("owner_id"):
-                    ping = f"<@{data['owner_id']}>"
-                if channel and ping:
-                    try:
+            if not data.get("expired", False) and not data.get("paused", False):
+                if now >= data["end_time"]:
+                    data["expired"] = True
+                    changed = True
+                    channel = self.bot.get_channel(data["channel_id"])
+                    ping = f"<@&{data['role_id']}>" if data.get("role_id") else f"<@{data['owner_id']}>"
+                    if channel:
                         await channel.send(f"⏰ Timer **{data['name']}** expired! {ping}")
-                    except Exception as e:
-                        print(f"[Timer Ping] Error: {e}")
-            if channel:
-                try:
-                    msg = await channel.fetch_message(data["message_id"])
-                    await msg.edit(embed=self.build_timer_embed(data))
-                except:
-                    pass
         if changed:
             save_timers(timers)
 
-    @tasks.loop(minutes=1)
-    async def force_resync_loop(self):
-        if not self.bot.is_ready():
-            return
-        timers = load_timers()
-        for tid, data in timers.items():
-            channel = self.bot.get_channel(data["channel_id"])
-            if channel:
-                try:
-                    msg = await channel.fetch_message(data["message_id"])
-                    await msg.edit(embed=self.build_timer_embed(data))
-                except:
-                    pass
-
 async def setup(bot: commands.Bot):
-    try:
-        await bot.add_cog(TimerCog(bot))
-    except CommandAlreadyRegistered:
-        print("[TimerCog] Commands already registered, skipping registration.")
+    await bot.add_cog(TimerCog(bot))

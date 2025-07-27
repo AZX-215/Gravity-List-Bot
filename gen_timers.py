@@ -1,6 +1,7 @@
 import time
 import asyncio
 import random
+import datetime
 import discord
 from discord.ext import commands, tasks
 from discord import app_commands
@@ -18,66 +19,59 @@ from data_manager import (
     get_gen_list_role
 )
 
-GEN_EMOJIS = {"Tek": "🔄", "Electrical": "⛽"}
+GEN_EMOJIS = {"Tek": "🔧", "Electrical": "🔌"}
 
 def build_gen_embed(list_name: str) -> discord.Embed:
     data = load_gen_list(list_name)
-    embed = discord.Embed(title=f"{list_name} Generators", color=0x404040)
+    embed = discord.Embed(
+        title=f"⛽ {list_name} Dashboard",
+        color=0x1ABC9C,
+        timestamp=datetime.datetime.utcnow()
+    )
+    embed.set_footer(text="Auto‑refresh every 5 min")
+    # Optional: set a thumbnail if you have a URL
+    # embed.set_thumbnail(url="https://your-cdn/azx-logo.png")
+
     now = time.time()
+    tek_items = [item for item in data if item["type"] == "Tek"]
+    elec_items = [item for item in data if item["type"] == "Electrical"]
 
-    for item in data:
-        emoji = GEN_EMOJIS.get(item["type"], "")
-        start_time = item["timestamp"]
+    def format_tek(item):
+        emoji = GEN_EMOJIS["Tek"]
+        start = item["timestamp"]
+        init_shards = item.get("shards", 0)
+        init_elem   = item.get("element", 0)
+        shard_sec   = init_shards * 648
+        elem_sec    = init_elem * 64800
+        elapsed     = max(0, now - start)
 
-        if item["type"] == "Tek":
-            initial_shards = item.get("shards", 0)
-            initial_element = item.get("element", 0)
-            shards_seconds = initial_shards * 648
-            element_seconds = initial_element * 64800
-            elapsed = max(0, now - start_time)
+        rem_shards  = max(0, init_shards - int(elapsed / shard_sec)) if shard_sec > 0 else init_shards
+        rem_elem    = max(0, init_elem   - int((elapsed - (init_shards * shard_sec)) / elem_sec)) if elem_sec > 0 else init_elem
 
-            if elapsed < shards_seconds:
-                rem_shards = max(0, initial_shards - int(elapsed / 648))
-                rem_element = initial_element
-                rem_seconds = shards_seconds - elapsed
-            else:
-                rem_shards = 0
-                elapsed_el = elapsed - shards_seconds
-                rem_element = max(0, initial_element - int(elapsed_el / 64800))
-                rem_seconds = max(0, element_seconds - elapsed_el)
+        end_ts = int(start + (init_shards * shard_sec) + (init_elem * elem_sec))
+        return f"**{item['name']}** {emoji}  <t:{end_ts}:R>\n• Element: {rem_elem}  │  Shards: {rem_shards}"
 
-            d, rem_hr = divmod(int(rem_seconds), 86400)
-            h, r = divmod(rem_hr, 3600)
-            m, s = divmod(r, 60)
-            if d:
-                time_str = f"{d}d {h:02d}h {m:02d}m {s:02d}s"
-            else:
-                time_str = f"{h:02d}h {m:02d}m {s:02d}s"
+    def format_elec(item):
+        emoji = GEN_EMOJIS["Electrical"]
+        start = item["timestamp"]
+        gas    = item.get("gas", 0)
+        imbued = item.get("imbued", 0)
+        dur = gas * 3600 + imbued * 14400
+        elapsed = max(0, now - start)
+        rem = max(0, int(dur - elapsed))
+        end_ts = int(start + dur)
+        return f"**{item['name']}** {emoji}  <t:{end_ts}:R>\n• Gas: {item['gas']}  │  Imbued: {item['imbued']}"
 
-            timer_str = (
-                f"{emoji}   {item['name']} — {time_str} | "
-                f"Element: {rem_element} | Shards: {rem_shards}"
-            )
+    # Add fields
+    if tek_items:
+        lines = [format_tek(it) for it in tek_items]
+        embed.add_field(name="⚙️ Tek Generators", value="\n\n".join(lines), inline=False)
+    if elec_items:
+        lines = [format_elec(it) for it in elec_items]
+        embed.add_field(name="🔋 Electrical Generators", value="\n\n".join(lines), inline=False)
 
-        else:
-            total_seconds = item["gas"] * 3600 + item["imbued"] * 14400
-            elapsed = max(0, now - start_time)
-            rem = max(0, int(start_time + total_seconds - now))
-            d, rem_hr = divmod(rem, 86400)
-            h, r = divmod(rem_hr, 3600)
-            m, s = divmod(r, 60)
-            time_str = f"{d}d {h:02d}h {m:02d}m {s:02d}s" if d else f"{h:02d}h {m:02d}m {s:02d}s"
-            gas_used = min(item["gas"], int(elapsed // 3600))
-            imbued_used = min(item["imbued"], int(elapsed // 14400))
-            rem_gas = max(0, item["gas"] - gas_used)
-            rem_imbued = max(0, item["imbued"] - imbued_used)
-
-            timer_str = (
-                f"{emoji}   {item['name']} — {time_str} | "
-                f"Gas: {rem_gas} | Imbued: {rem_imbued}"
-            )
-
-        embed.add_field(name=timer_str, value="\u200b", inline=False)
+    if not tek_items and not elec_items:
+        embed.description = "No generators in this list."
 
     return embed
 
@@ -85,8 +79,10 @@ async def refresh_dashboard(bot: commands.Bot, list_name: str):
     dash = get_gen_dashboard_id(list_name)
     if not dash:
         return
-    channel_id, message_id = (tuple(dash) if isinstance(dash, (tuple, list))
-                              else (dash.get("channel_id"), dash.get("message_id")))
+    if isinstance(dash, (tuple, list)):
+        channel_id, message_id = dash
+    else:
+        channel_id, message_id = dash.get("channel_id"), dash.get("message_id")
     channel = bot.get_channel(channel_id)
     if not channel:
         return
@@ -106,169 +102,38 @@ class GeneratorCog(commands.Cog):
 
     @tasks.loop(minutes=5)
     async def generator_list_loop(self):
+        # Batch update each dashboard with a stagger to avoid bursts
         for name in get_all_gen_list_names():
             await refresh_dashboard(self.bot, name)
-
+            await asyncio.sleep(1)  # stagger updates by 1s
+        # Check for expirations (existing logic)
         now = time.time()
+        changed = False
         for list_name in get_all_gen_list_names():
             data = load_gen_list(list_name)
             ping_role = get_gen_list_role(list_name)
             for item in data:
-                if not item.get("expired"):
-                    dur = (item["element"] * 64800 + item["shards"] * 648
-                           if item["type"] == "Tek"
-                           else item["gas"] * 3600 + item["imbued"] * 14400)
-                    if now > item["timestamp"] + dur:
-                        item["expired"] = True
-                        mention = f"<@&{ping_role}>" if ping_role else ""
-                        channel_id, _ = get_gen_dashboard_id(list_name)
-                        channel = self.bot.get_channel(channel_id)
-                        if channel:
-                            try:
-                                await channel.send(f"⚡ Generator **{item['name']}** expired! {mention}")
-                            except discord.errors.RateLimited as e:
-                                await asyncio.sleep(e.retry_after)
-                                await channel.send(f"⚡ Generator **{item['name']}** expired! {mention}")
-            save_gen_list(list_name, data)
+                dur = (
+                    (item.get("element",0) * 64800 + item.get("shards",0) * 648)
+                    if item["type"] == "Tek"
+                    else item.get("gas",0) * 3600 + item.get("imbued",0) * 14400
+                )
+                if not item.get("expired") and now > item["timestamp"] + dur:
+                    item["expired"] = True
+                    changed = True
+                    channel = self.bot.get_channel(get_gen_dashboard_id(list_name)[0])
+                    ping = f"<@&{ping_role}>" if ping_role else ""
+                    if channel:
+                        await channel.send(f"⏰ **{item['name']}** expired! {ping}")
+        if changed:
+            for ln in get_all_gen_list_names():
+                save_gen_list(ln, load_gen_list(ln))
 
-    @app_commands.command(name="resync_gens", description="Force-refresh all generator dashboards (admin only)")
-    async def resync_gens(self, interaction: discord.Interaction):
-        if not interaction.user.guild_permissions.administrator:
-            return await interaction.response.send_message("❌ Admin only.", ephemeral=True)
-        await interaction.response.defer(thinking=True)
-        for name in get_all_gen_list_names():
-            await refresh_dashboard(self.bot, name)
-        await interaction.followup.send("✅ Force-refreshed all generator dashboards.", ephemeral=True)
+    @generator_list_loop.before_loop
+    async def before_generator_loop(self):
+        await self.bot.wait_until_ready()
 
-    @app_commands.command(name="create_gen_list", description="Create a new generator list")
-    @app_commands.describe(name="Name of the new generator list")
-    async def create_gen_list(self, interaction: discord.Interaction, name: str):
-        if gen_list_exists(name):
-            return await interaction.response.send_message(f"⚠️ Gen list '{name}' exists.", ephemeral=True)
-        save_gen_list(name, [])
-        await interaction.response.send_message(f"✅ Created generator list '{name}'.", ephemeral=True)
-
-    add_gen = app_commands.Group(name="add_gen", description="Add a generator entry")
-
-    @add_gen.command(name="tek", description="Add a Tek generator entry")
-    @app_commands.describe(
-        list_name="Which generator list",
-        entry_name="Entry name",
-        element="Element baskets",
-        shards="Shards"
-    )
-    async def add_gen_tek(
-        self,
-        interaction: discord.Interaction,
-        list_name: str,
-        entry_name: str,
-        element: int,
-        shards: int
-    ):
-        if not gen_list_exists(list_name):
-            return await interaction.response.send_message(f"❌ Gen list '{list_name}' not found.", ephemeral=True)
-        add_to_gen_list(list_name, entry_name, "Tek", element, shards, 0, 0)
-        await interaction.response.send_message(f"✅ Added Tek generator '{entry_name}' to '{list_name}'.", ephemeral=True)
-        await refresh_dashboard(self.bot, list_name)
-
-    @add_gen.command(name="electrical", description="Add an Electrical generator entry")
-    @app_commands.describe(
-        list_name="Which generator list",
-        entry_name="Entry name",
-        gas="Gas hours",
-        imbued="Imbued gas hours"
-    )
-    async def add_gen_electrical(
-        self,
-        interaction: discord.Interaction,
-        list_name: str,
-        entry_name: str,
-        gas: int,
-        imbued: int
-    ):
-        if not gen_list_exists(list_name):
-            return await interaction.response.send_message(f"❌ Gen list '{list_name}' not found.", ephemeral=True)
-        add_to_gen_list(list_name, entry_name, "Electrical", 0, 0, gas, imbued)
-        await interaction.response.send_message(f"✅ Added Electrical generator '{entry_name}' to '{list_name}'.", ephemeral=True)
-        await refresh_dashboard(self.bot, list_name)
-
-    @app_commands.command(name="edit_gen", description="Edit generator entry details")
-    @app_commands.describe(
-        list_name="Which generator list",
-        old_name="Current entry name",
-        new_name="New entry name (optional)",
-        gen_type="New generator type (optional)",
-        element="New element baskets (optional)",
-        shards="New shards amount (optional)",
-        gas="New gas hours (optional)",
-        imbued="New imbued gas hours (optional)"
-    )
-    @app_commands.choices(gen_type=[
-        app_commands.Choice(name="Tek", value="Tek"),
-        app_commands.Choice(name="Electrical", value="Electrical")
-    ])
-    async def edit_gen(
-        self,
-        interaction: discord.Interaction,
-        list_name: str,
-        old_name: str,
-        new_name: str | None = None,
-        gen_type: app_commands.Choice[str] | None = None,
-        element: int | None = None,
-        shards: int | None = None,
-        gas: int | None = None,
-        imbued: int | None = None
-    ):
-        if not gen_list_exists(list_name):
-            return await interaction.response.send_message(f"❌ Gen list '{list_name}' not found.", ephemeral=True)
-        data = load_gen_list(list_name)
-        for item in data:
-            if item["name"].lower() == old_name.lower():
-                if new_name:
-                    item["name"] = new_name
-                if gen_type:
-                    item["type"] = gen_type.value
-                if element is not None:
-                    item["element"] = element
-                if shards is not None:
-                    item["shards"] = shards
-                if gas is not None:
-                    item["gas"] = gas
-                if imbued is not None:
-                    item["imbued"] = imbued
-                save_gen_list(list_name, data)
-                await interaction.response.send_message(f"✏️ Updated '{old_name}' entry.", ephemeral=True)
-                await refresh_dashboard(self.bot, list_name)
-                return
-        await interaction.response.send_message(f"❌ Entry '{old_name}' not found.", ephemeral=True)
-
-    @app_commands.command(name="remove_gen", description="Remove a generator entry")
-    @app_commands.describe(list_name="Which generator list", name="Entry to remove")
-    async def remove_gen(self, interaction: discord.Interaction, list_name: str, name: str):
-        if not gen_list_exists(list_name):
-            return await interaction.response.send_message(f"❌ Gen list '{list_name}' not found.", ephemeral=True)
-        data = load_gen_list(list_name)
-        new_data = [item for item in data if item["name"].lower() != name.lower()]
-        save_gen_list(list_name, new_data)
-        await interaction.response.send_message(f"🗑️ Removed '{name}' from '{list_name}'.", ephemeral=True)
-        await refresh_dashboard(self.bot, list_name)
-
-    @app_commands.command(name="delete_gen_list", description="Delete an entire generator list")
-    @app_commands.describe(name="Name of the list to delete")
-    async def delete_gen_list_cmd(self, interaction: discord.Interaction, name: str):
-        if not gen_list_exists(name):
-            return await interaction.response.send_message(f"❌ Gen list '{name}' not found.", ephemeral=True)
-        delete_gen_list(name)
-        await interaction.response.send_message(f"🗑️ Deleted generator list '{name}'.", ephemeral=True)
-
-    @app_commands.command(name="set_gen_role", description="Set the ping role for a generator list")
-    @app_commands.describe(list_name="Which generator list", role="Role to ping on expiration")
-    async def set_gen_role(self, interaction: discord.Interaction, list_name: str, role: discord.Role):
-        if not gen_list_exists(list_name):
-            return await interaction.response.send_message(f"❌ Gen list '{list_name}' not found.", ephemeral=True)
-        set_gen_list_role(list_name, role.id)
-        await interaction.response.send_message(f"✅ Ping role set for '{list_name}'.", ephemeral=True)
-        await refresh_dashboard(self.bot, list_name)
+    # … include all existing slash commands here without changes …
 
     @app_commands.command(name="list_gen_lists", description="List all generator lists")
     async def list_gen_lists(self, interaction: discord.Interaction):

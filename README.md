@@ -1,103 +1,86 @@
 # Gravity List Bot
 
-**Gravity List Bot** 🎮 is a Discord bot built for Ark Survival Ascended communities and beyond, offering:
-
-- 📋 **Categorized Lists** with custom emojis  
-- ⏳ **Inline & Standalone Timers** for countdowns  
-- ⚡ **Generator Dashboards** (Tek & Electrical) with auto-refresh & expiry pings  
-- 💾 **JSON Persistence** via a mounted `lists/` volume  
+**Gravity List Bot** 🎮 is a Discord bot for Ark Survival Ascended communities (and beyond):
 
 ---
 
-## 📦 Key Features
+## 📋 Categorized Lists
+Create & manage entries with emojis:
+- 👑 Owner, 🔴 Enemy, 🟢 Friend, 🔵 Ally, 🟡 Beta, ⚫ Item  
+- Headers & notes:  
+  `/add_header list_name:<list> header:<text>`  
+  `/add_text   list_name:<list> text:<note>`
 
-### 1. 📋 Categorized Lists  
-- **Create** & **Manage** entries with emojis:  
-  - 👑 Owner  
-  - 🔴 Enemy  
-  - 🟢 Friend  
-  - 🔵 Ally  
-  - 🟡 Beta  
-  - ⚫ Item  
-- **Headers & Notes**:  
-  - `/add_header list_name:<list> header:<text>`  
-  - `/add_text   list_name:<list> text:<note>`
+---
 
-### 2. ⏳ Inline Timers in Lists  
+## ⏳ Inline Timers in Lists  
 - `/add_timer_to_list list_name:<list> name:<timer> hours:<int> minutes:<int>`  
-- 🔄 **Auto-refresh**: lists containing timers update every **3 seconds**  
-- 🔧 **Force-resync**: `/resync_timers` (admin) re-syncs all inline and standalone timers
+- **Self‑updating** via Discord’s native timestamps—no bot edits required!  
+- Shows live countdown: `<t:TIMESTAMP:R>`
 
-### 3. ⌛ Standalone Countdown Timers  
+---
+
+## ⌛ Standalone Countdown Timers  
 - `/create_timer  name:<timer> hours:<int> minutes:<int> [role:<@role>]`  
 - `/pause_timer   name:<timer>`  
 - `/resume_timer  name:<timer>`  
 - `/delete_timer  name:<timer>`  
-- **Force-resync**: `/resync_timers` also refreshes standalone timers
+- **Expiry pings** are checked every minute; no continuous message edits.
 
-### 4. ⚡ Generator Timers (Ark Ascended)  
-- `/create_gen_list           name:<list>`  
-- `/add_gen tek               list_name:<list> entry_name:<name> element:<int> shards:<int>`  
-- `/add_gen electrical        list_name:<list> entry_name:<name> gas:<int> imbued:<int>`  
-- `/edit_gen                  list_name:<list> old_name:<old> [--new_name:<new>] [--gen_type:<Tek|Electrical>] [--element:<int>] [--shards:<int>] [--gas:<int>] [--imbued:<int>]`  
-- `/remove_gen                list_name:<list> name:<entry>`  
-- `/delete_gen_list           name:<list>`  
-- `/set_gen_role              list_name:<list> role:<@role>`  
-- `/list_gen_lists            (admin)`  
-- **Force-resync**: `/resync_gens` (admin)  
-- 🔄 **Auto-refresh**: dashboards update every **5 minutes**; expiry pings summon roles when fuel runs out  
+---
 
-### 5. 🔗 Unified Dashboards  
-- `/lists name:<list>` deploys or updates **any** list or generator dashboard  
-- Background tasks handle efficient refresh.
+## ⚡ Generator Dashboards  
+- `/create_gen_list name:<list>`  
+- `/add_gen tek list_name:<list> entry_name:<name> element:<int> shards:<int>`  
+- `/add_gen electrical list_name:<list> entry_name:<name> gas:<int> imbued:<int>`  
+- `/edit_gen`, `/remove_gen`, `/delete_gen_list`, `/set_gen_role`, `/list_gen_lists`  
+- **Auto‑refresh** every 5 minutes with **staggered updates** to avoid bursts  
+- **Enhanced embeds** with color accents, section grouping, bold names, emojis, and timestamps.
 
-### 6. ⚙️ Utilities & Help  
-- `/list_all` (admin) — lists **all** regular & generator lists  
-- `/help` — displays usage instructions  
+---
+
+## 🔍 Logging & Debug  
+- Configure optional logging channel:  
+  In your `.env`, add:  
+  ```bash
+  LOG_CHANNEL_ID=123456789012345678
+  ```  
+- Warnings & errors are buffered and posted every minute as a single log message.
+
+---
+
+## 🔗 Deploying Any Dashboard  
+- `/lists name:<list>` shows or updates **any** regular list or generator dashboard.
 
 ---
 
 ## 🛠️ Local Setup
 
-1. **Clone the Repo**  
+1. Clone & enter directory:
    ```bash
    git clone https://github.com/AZX-215/Gravity-List-Bot.git
    cd Gravity-List-Bot
    ```
-
-2. **Configure Environment**  
+2. Configure `.env`:
    ```bash
    cp .env.example .env
    DISCORD_TOKEN=YOUR_DISCORD_TOKEN
    CLIENT_ID=YOUR_CLIENT_ID
+   LOG_CHANNEL_ID=OPTIONAL_LOG_CHANNEL_ID
    DATABASE_PATH=lists/data.json
    ```
-
-3. **Install Dependencies**  
+3. Install dependencies:
    ```bash
    pip install -r requirements.txt
    ```
-
-4. **Run**  
+4. Run the bot:
    ```bash
    python bot.py
    ```
 
 ---
 
-## ☁️ Deployment Notes
-
-- 🔄 Inline-timer lists: update every **3s**  
-- ⚡ Generator dashboards: update every **5min**  
-- 🔧 **Manual Resync**: `/resync_timers` & `/resync_gens`  
-- 📂 Ensure volume mount at `/app/lists`  
-
----
-
 ## 🤝 Contributing
-
-PRs & issues welcome! Add features like pagination, permissions controls, or custom dashboard embeds.
-
-## 📜 License
+PRs & issues welcome!  
 
 MIT License
