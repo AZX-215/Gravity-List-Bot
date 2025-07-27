@@ -82,6 +82,8 @@ async def on_ready():
         try:
             await setup_timers(bot)
             await setup_gen_timers(bot)
+            # start the periodic list-dashboard updater
+            list_dashboard_loop.start()
             await bot.tree.sync()
             print(f"Bot ready. Commands synced for {bot.user}")
         except app_commands.errors.CommandAlreadyRegistered as e:
@@ -90,6 +92,18 @@ async def on_ready():
             bot._startup_done = True
     else:
         print(f"Bot reconnected: {bot.user}")
+
+# ━━━━━━ Periodic List Dashboard Refresh ━━━━━━━━━━
+@tasks.loop(seconds=3)
+async def list_dashboard_loop():
+    for name in get_all_list_names():
+        # only refresh dashboards for lists with inline timers
+        data = load_list(name)
+        if any(item.get("category") == "Timer" for item in data):
+            try:
+                await push_list_update(name)
+            except Exception as e:
+                print(f"[List Loop] Error updating {name}: {e}")
 
 # ━━━━━━ Slash Commands ━━━━━━━━━━
 
