@@ -8,12 +8,14 @@ from data_manager import load_timers, add_timer, save_timers, remove_timer
 POLL_INTERVAL = 1  # update every second
 
 class TimerCog(commands.Cog):
-    def __init__(self, bot):
+    def __init__(self, bot: commands.Bot):
         self.bot = bot
         self.timer_loop.start()
+        self.force_resync_loop.start()
 
     def cog_unload(self):
         self.timer_loop.cancel()
+        self.force_resync_loop.cancel()
 
     def build_timer_embed(self, data):
         now = time.time()
@@ -30,19 +32,18 @@ class TimerCog(commands.Cog):
                 remaining = 0
                 status    = "✅ Expired"
                 color     = 0xFF0000
+
         hrs, rem = divmod(int(remaining), 3600)
         mins, sec= divmod(rem, 60)
         timer_str= f"{hrs:02d}h {mins:02d}m {sec:02d}s"
 
-        # Title contains the timer name only
         embed = discord.Embed(
             title=f"Timer: {data['name']}",
             color=color
         )
-        # Status, emoji, and countdown on one line in description
         embed.description = f"{status} — {timer_str}"
 
-        # Ping on its own footer line
+        # Ping role or owner
         if data.get("role_id"):
             embed.set_footer(text=f"Pings: <@&{data['role_id']}>")
         elif data.get("owner_id"):
@@ -51,9 +52,21 @@ class TimerCog(commands.Cog):
         return embed
 
     @app_commands.command(name="create_timer", description="Create a countdown timer")
-    @app_commands.describe(name="Timer name", hours="Hours", minutes="Minutes", role="Role to ping when timer expires (optional)")
-    async def create_timer(self, interaction: discord.Interaction, name: str, hours: int, minutes: int, role: discord.Role = None):
-        total   = hours*3600 + minutes*60
+    @app_commands.describe(
+        name="Timer name",
+        hours="Hours",
+        minutes="Minutes",
+        role="Role to ping when timer expires (optional)"
+    )
+    async def create_timer(
+        self,
+        interaction: discord.Interaction,
+        name: str,
+        hours: int,
+        minutes: int,
+        role: discord.Role = None
+    ):
+        total   = hours * 3600 + minutes * 60
         end_ts  = time.time() + total
         tid     = str(uuid.uuid4())
         timer_data = {
@@ -136,6 +149,24 @@ class TimerCog(commands.Cog):
             f"❌ No timer named '{name}' found", ephemeral=True
         )
 
+    @app_commands.command(
+        name="resync_timers",
+        description="Force-refresh all timer messages (admin only)"
+    )
+    async def resync_timers(self, interaction: discord.Interaction):
+        if not interaction.user.guild_permissions.administrator:
+            return await interaction.response.send_message("❌ Admin only.", ephemeral=True)
+        timers = load_timers()
+        for tid, data in timers.items():
+            channel = self.bot.get_channel(data["channel_id"])
+            if channel:
+                try:
+                    msg = await channel.fetch_message(data["message_id"])
+                    await msg.edit(embed=self.build_timer_embed(data))
+                except:
+                    pass
+        await interaction.response.send_message("✅ Force-refreshed all timer displays.", ephemeral=True)
+
     @tasks.loop(seconds=POLL_INTERVAL)
     async def timer_loop(self):
         if not self.bot.is_ready():
@@ -169,6 +200,20 @@ class TimerCog(commands.Cog):
                     pass
         if changed:
             save_timers(timers)
+
+    @tasks.loop(minutes=1)
+    async def force_resync_loop(self):
+        if not self.bot.is_ready():
+            return
+        timers = load_timers()
+        for tid, data in timers.items():
+            channel = self.bot.get_channel(data["channel_id"])
+            if channel:
+                try:
+                    msg = await channel.fetch_message(data["message_id"])
+                    await msg.edit(embed=self.build_timer_embed(data))
+                except:
+                    pass
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(TimerCog(bot))
