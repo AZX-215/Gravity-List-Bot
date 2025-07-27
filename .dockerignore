@@ -6,3 +6,4 @@ lists/
 venv/
 __pycache__/
 *.py[cod]
+.vs/
