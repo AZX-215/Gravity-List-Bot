@@ -1,49 +1,55 @@
-# Gravity List Bot
+# Gravity List Bot (v3.2)
 
 **Gravity List Bot** is a Discord bot designed to help your community:
 
-- **Track categorized lists** (Member roles, alliances, enemies, owners, and inline timers)
-- **Run real‑time countdown timers** as standalone or embedded in lists
-- **Manage Ark Ascended generator timers** (Tek & Electrical) with auto‑updating dashboards
-- **Persist all data** via JSON files in a mounted volume (`lists/` directory)
+- **Track categorized lists** with emojis: 👑 Owner, 🔴 Enemy, 🟢 Friend, 🔵 Ally, 🟡 Beta, ⚫ Item
+- **Inline timers** embedded in lists (countdown to days/h/m/s)
+- **Standalone countdown timers**
+- **Generator timers** (Ark Ascended Tek & Electrical)
+- **Custom headers & notes**
+- **Unified dashboards** with auto-refresh
+- **Optional comments** on list entries
+- **Persistent JSON storage**
 
 ---
 
 ## 📦 Key Features
 
-9. **Custom Header & Notes**
-   - `/add_header` adds a centered bold title to the top of any list
-   - `/add_text` adds a freeform bullet comment to the bottom of any list
-
 1. **Categorized Lists**  
-   - Create, add, edit, remove, delete entries with emojis: 👑 Owner | 🔴 Enemy | 🟢 Friend | 🔵 Ally | 🟡 Beta  
-   - Inline timers in lists: ⏳ entries count down live
+   - `/create_list`, `/add_name`, `/edit_name`, `/remove_name`, `/delete_list`  
+   - Supports categories: Owner (👑), Enemy (🔴), Friend (🟢), Ally (🔵), Beta (🟡), Item (⚫)  
+   - Optional `comment` on `/add_name`, rendered italic below the entry
 
-2. **Standalone Countdown Timers**  
-   - `/create_timer`, `/pause_timer`, `/resume_timer`, `/delete_timer`  
-   - Updates every second in your channel  
+2. **Custom Headers & Notes**  
+   - `/add_header` sets a centered header at the top of a list  
+   - `/add_text` appends a freeform bullet note at the bottom
 
 3. **Inline Timers in Lists**  
    - `/add_timer_to_list` adds a ⏳ timer entry to any existing list  
-   - Timers auto‑update every 5 seconds in the background
+   - Countdown displays days/hours/minutes/seconds  
+   - Dashboards auto-update every **3 seconds** for lists containing timers
 
-4. **Generator Timers (Ark Ascended)**  
-   - `/create_generator_list` to start a fresh generator list  
-   - `/add_generator`, `/edit_generator`, `/remove_generator`, `/delete_generator_list`  
-   - Tracks Tek and Electrical fuel durations with live countdown  
+4. **Standalone Countdown Timers**  
+   - `/create_timer`, `/pause_timer`, `/resume_timer`, `/delete_timer`  
+   - Embeds update every second; optional role ping on expiry
 
-5. **Unified Dashboards**  
-   - `/lists <name>` shows or refreshes any regular or generator list embed  
-   - Auto‑refreshes on changes and every 5 seconds in the background
+5. **Generator Timers (Ark Ascended)**  
+   - `/create_generator_list`, `/add_generator`, `/edit_generator`, `/remove_generator`, `/delete_generator_list`  
+   - Tracks Tek & Electrical durations with days support
 
-6. **Overview of All Lists**  
-   - `/list_all` (Admin only) lists all regular & generator list names
+6. **Unified Dashboards**  
+   - `/lists <name>` shows or refreshes any regular or generator dashboard  
+   - Auto-refresh on changes and via `/resync_timers` every 3 seconds for timer lists  
+   - `/resync_timers` now force-refreshes **all** dashboards (regular & generator)
 
-7. **Help & Utility**  
-   - `/help` displays the full command list and usage  
+7. **Overview of All Lists**  
+   - `/list_all` (Admin only) lists all regular & generator lists
 
-8. **JSON‑backed Persistence**  
-   - Data lives under `lists/` (including `generator_lists/`)  
+8. **Help & Utility**  
+   - `/help` displays usage instructions and all commands
+
+9. **JSON‑Backed Persistence**  
+   - All data stored as JSON under `lists/`  
    - Volume mount (`/app/lists`) ensures data survives redeploys
 
 ---
@@ -57,7 +63,7 @@
    ```
 
 2. **Create `.env`**
-   ```
+   ```bash
    cp .env.example .env
    DISCORD_TOKEN=YOUR_DISCORD_TOKEN
    CLIENT_ID=YOUR_CLIENT_ID
@@ -97,7 +103,7 @@
 ## ✅ OAuth2 & Permissions
 
 **Scopes**: `applications.commands` + `bot`  
-**Permissions**: Send Messages, Embed Links, Read History, Use Application Commands  
+**Permissions**: Send Messages, Embed Links, Read History, Use Application Commands
 
 ---
 
