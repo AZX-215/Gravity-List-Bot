@@ -19,26 +19,29 @@ CLIENT_ID = int(os.getenv("CLIENT_ID"))
 
 intents = discord.Intents.default()
 intents.guilds = True
+
 bot = commands.Bot(command_prefix="!", intents=intents, application_id=CLIENT_ID)
 
 # ━━━━━━ Categories ━━━━━━━━━━
 CATEGORY_EMOJIS = {
     "Owner": "👑", "Enemy": "🔴", "Friend": "🟢",
-    "Ally":  "🔵",  "Beta":  "🟡",  "Item":  "⚫", "Timer":"⏳"
+    "Ally":   "🔵", "Beta":   "🟡", "Item":  "⚫", "Timer":"⏳"
 }
 
 # ━━━━━━ Embed & Dashboard Helpers ━━━━━━━━━━
 async def push_list_update(list_name: str):
     dash = get_dashboard_id(list_name)
-    if dash:
-        channel_id, message_id = dash
-        ch = bot.get_channel(channel_id)
-        if ch:
-            try:
-                msg = await ch.fetch_message(message_id)
-                await msg.edit(embed=build_embed(list_name))
-            except Exception as e:
-                print(f"[List Update] {e}")
+    if not dash:
+        return
+    ch_id, msg_id = dash
+    ch = bot.get_channel(ch_id)
+    if not ch:
+        return
+    try:
+        msg = await ch.fetch_message(msg_id)
+        await msg.edit(embed=build_embed(list_name))
+    except Exception as e:
+        print(f"[List Update] {e}")
 
 def build_embed(list_name: str) -> discord.Embed:
     data = load_list(list_name)
@@ -46,9 +49,10 @@ def build_embed(list_name: str) -> discord.Embed:
     embed.add_field(name="\u200b", value="\u200b", inline=False)
 
     now = time.time()
+    # sort: Header → normal entries → Text
     data.sort(key=lambda x: 1 if x.get("category") == "Header"
-                           else 3 if x.get("category") == "Text"
-                           else 2)
+                         else 3 if x.get("category") == "Text"
+                         else 2)
 
     for item in data:
         cat = item.get("category")
@@ -59,7 +63,8 @@ def build_embed(list_name: str) -> discord.Embed:
             embed.add_field(name=f"• {item['name']}", value="\u200b", inline=False)
 
         elif cat == "Timer":
-            end_ts = item.get("timer_end", 0)
+            # expects timer_end (float) in item
+            end_ts = item.get("timer_end") or (item.get("timer_start",0) + item.get("timer_duration",0))
             rem = max(0, int(end_ts - now))
             d, rem_hr = divmod(rem, 86400)
             h, r = divmod(rem_hr, 3600)
@@ -70,7 +75,7 @@ def build_embed(list_name: str) -> discord.Embed:
         else:
             name_fld = f"{CATEGORY_EMOJIS.get(cat,'')}   {item['name']}"
             embed.add_field(name=name_fld, value="\u200b", inline=False)
-            if item.get("comment"):
+            if isinstance(item, dict) and item.get("comment"):
                 embed.add_field(name="\u200b", value=f"*{item['comment']}*", inline=False)
 
     return embed
@@ -82,12 +87,11 @@ async def on_ready():
         try:
             await setup_timers(bot)
             await setup_gen_timers(bot)
-            # start the periodic list-dashboard updater
             list_dashboard_loop.start()
             await bot.tree.sync()
             print(f"Bot ready. Commands synced for {bot.user}")
         except app_commands.errors.CommandAlreadyRegistered as e:
-            print(f"[Startup] Some commands were already registered: {e}")
+            print(f"[Startup] Commands already registered: {e}")
         finally:
             bot._startup_done = True
     else:
@@ -97,9 +101,9 @@ async def on_ready():
 @tasks.loop(seconds=3)
 async def list_dashboard_loop():
     for name in get_all_list_names():
-        # only refresh dashboards for lists with inline timers
         data = load_list(name)
-        if any(item.get("category") == "Timer" for item in data):
+        # only those lists whose entries include a dict with category=="Timer"
+        if any(isinstance(item, dict) and item.get("category") == "Timer" for item in data):
             try:
                 await push_list_update(name)
             except Exception as e:
@@ -111,16 +115,14 @@ async def list_dashboard_loop():
 @app_commands.describe(name="Name of the new list")
 async def create_list(interaction: discord.Interaction, name: str):
     if list_exists(name):
-        return await interaction.response.send_message(f"⚠️ List '{name}' already exists.", ephemeral=True)
+        return await interaction.response.send_message(f"⚠️ List '{name}' exists.", ephemeral=True)
     save_list(name, [])
     await interaction.response.send_message(f"✅ Created list '{name}'.", ephemeral=True)
 
 @bot.tree.command(name="add_name", description="Add an entry to a list")
 @app_commands.describe(
-    list_name="Which list",
-    name="Entry name",
-    category="Category emoji",
-    comment="Optional comment below the entry"
+    list_name="Which list", name="Entry name",
+    category="Category emoji", comment="Optional comment"
 )
 @app_commands.choices(category=[
     app_commands.Choice(name=k, value=k)
@@ -141,7 +143,7 @@ async def add_name(
     data = load_list(list_name)
     data.append(entry)
     save_list(list_name, data)
-    await interaction.response.send_message(f"✅ Added '{name}' to '{list_name}'.", ephemeral=True)
+    await interaction.response.send_message(f"✅ Added '{name}'.", ephemeral=True)
     await push_list_update(list_name)
 
 @bot.tree.command(name="remove_name", description="Remove an entry from a list")
@@ -149,18 +151,15 @@ async def add_name(
 async def remove_name(interaction: discord.Interaction, list_name: str, name: str):
     if not list_exists(list_name):
         return await interaction.response.send_message(f"❌ List '{list_name}' not found.", ephemeral=True)
-    data = [e for e in load_list(list_name) if e["name"].lower() != name.lower()]
+    data = [e for e in load_list(list_name) if not (isinstance(e, dict) and e["name"].lower() == name.lower())]
     save_list(list_name, data)
-    await interaction.response.send_message(f"🗑️ Removed '{name}' from '{list_name}'.", ephemeral=True)
+    await interaction.response.send_message(f"🗑️ Removed '{name}'.", ephemeral=True)
     await push_list_update(list_name)
 
 @bot.tree.command(name="edit_name", description="Edit an entry in a list")
 @app_commands.describe(
-    list_name="Which list",
-    old_name="Existing entry",
-    new_name="New entry name",
-    new_category="New category",
-    new_comment="Optional new comment (blank to clear)"
+    list_name="Which list", old_name="Existing entry",
+    new_name="New entry name", new_category="New category", new_comment="New comment (blank to clear)"
 )
 @app_commands.choices(new_category=[
     app_commands.Choice(name=k, value=k)
@@ -178,7 +177,7 @@ async def edit_name(
         return await interaction.response.send_message(f"❌ List '{list_name}' not found.", ephemeral=True)
     data = load_list(list_name)
     for e in data:
-        if e["name"].lower() == old_name.lower():
+        if isinstance(e, dict) and e["name"].lower() == old_name.lower():
             e["name"]     = new_name
             e["category"] = new_category.value
             if new_comment is not None:
@@ -200,12 +199,7 @@ async def delete_list_cmd(interaction: discord.Interaction, name: str):
     await interaction.response.send_message(f"🗑️ Deleted list '{name}'.", ephemeral=True)
 
 @bot.tree.command(name="add_timer_to_list", description="Add a timer entry into a regular list")
-@app_commands.describe(
-    list_name="Which list",
-    name="Timer name",
-    hours="Hours",
-    minutes="Minutes"
-)
+@app_commands.describe(list_name="Which list", name="Timer name", hours="Hours", minutes="Minutes")
 async def add_timer_to_list(
     interaction: discord.Interaction,
     list_name: str,
@@ -215,12 +209,12 @@ async def add_timer_to_list(
 ):
     if not list_exists(list_name):
         return await interaction.response.send_message(f"❌ List '{list_name}' not found.", ephemeral=True)
-    end_ts = time.time() + (hours * 3600 + minutes * 60)
+    end_ts = time.time() + (hours*3600 + minutes*60)
     entry = {"name": name, "category": "Timer", "timer_end": end_ts}
     data = load_list(list_name)
     data.append(entry)
     save_list(list_name, data)
-    await interaction.response.send_message(f"⏳ Timer '{name}' added to '{list_name}'.", ephemeral=True)
+    await interaction.response.send_message(f"⏳ Timer '{name}' added.", ephemeral=True)
     await push_list_update(list_name)
 
 @bot.tree.command(name="add_text", description="Add a bullet note at bottom of a list")
@@ -231,7 +225,7 @@ async def add_text(interaction: discord.Interaction, list_name: str, text: str):
     data = load_list(list_name)
     data.append({"name": text, "category": "Text"})
     save_list(list_name, data)
-    await interaction.response.send_message(f"📝 Added text to '{list_name}'.", ephemeral=True)
+    await interaction.response.send_message(f"📝 Added text.", ephemeral=True)
     await push_list_update(list_name)
 
 @bot.tree.command(name="add_header", description="Add/update centered header at top of a list")
@@ -239,18 +233,19 @@ async def add_text(interaction: discord.Interaction, list_name: str, text: str):
 async def add_header(interaction: discord.Interaction, list_name: str, header: str):
     if not list_exists(list_name):
         return await interaction.response.send_message(f"❌ List '{list_name}' not found.", ephemeral=True)
-    data = [e for e in load_list(list_name) if e.get("category") != "Header"]
-    data.insert(0, {"name": header, "category": "Header"})
+    data = [e for e in load_list(list_name) if not (isinstance(e, dict) and e.get("category")=="Header")]
+    data.insert(0, {"name": header, "category":"Header"})
     save_list(list_name, data)
-    await interaction.response.send_message(f"�🏷️ Set header for '{list_name}'.", ephemeral=True)
+    await interaction.response.send_message(f"🏷️ Header set.", ephemeral=True)
     await push_list_update(list_name)
 
 @bot.tree.command(name="lists", description="Show or update any list dashboard")
 @app_commands.describe(name="List name")
 async def lists(interaction: discord.Interaction, name: str):
+    # regular or inline-timer lists
     if list_exists(name):
         embed = build_embed(name)
-        dash = get_dashboard_id(name)
+        dash  = get_dashboard_id(name)
         if dash:
             ch_id, msg_id = dash
             ch = interaction.guild.get_channel(ch_id)
@@ -258,7 +253,7 @@ async def lists(interaction: discord.Interaction, name: str):
                 try:
                     msg = await ch.fetch_message(msg_id)
                     await msg.edit(embed=embed)
-                    return await interaction.response.send_message(f"✅ Refreshed '{name}'.", ephemeral=True)
+                    return await interaction.response.send_message(f"✅ Refreshed.", ephemeral=True)
                 except:
                     pass
         await interaction.response.send_message(embed=embed)
@@ -266,16 +261,17 @@ async def lists(interaction: discord.Interaction, name: str):
         save_dashboard_id(name, msg.channel.id, msg.id)
         return
 
+    # generator lists
     if name in get_all_gen_list_names():
         embed = build_gen_dashboard_embed(name)
-        dash = get_gen_dashboard_id(name)
+        dash  = get_gen_dashboard_id(name)
         if dash:
             ch_id, msg_id = dash
             ch = interaction.guild.get_channel(ch_id)
             if ch:
                 try:
                     msg = await ch.fetch_message(msg_id)
-                    return await interaction.response.send_message(f"✅ Refreshed generator '{name}'.", embed=embed, ephemeral=True)
+                    return await interaction.response.send_message(f"✅ Refreshed gen.", embed=embed, ephemeral=True)
                 except:
                     pass
         await interaction.response.send_message(embed=embed)
@@ -291,18 +287,19 @@ async def list_all(interaction: discord.Interaction):
         return await interaction.response.send_message("❌ Admin only.", ephemeral=True)
     regs = get_all_list_names()
     gens = get_all_gen_list_names()
-    lines = [f"• {r} (List)" for r in regs] + [f"• {g} (Gen List)" for g in gens]
-    embed = discord.Embed(title="All Lists", description="\n".join(lines) or "No lists found.", color=0x808080)
+    lines = [f"• {r} (List)" for r in regs] + [f"• {g} (Gen)" for g in gens]
+    desc = "\n".join(lines) or "No lists found."
+    embed = discord.Embed(title="All Lists", description=desc, color=0x808080)
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
-@bot.tree.command(name="resync_timers", description="Force-refresh all list & generator dashboards (admin only)")
+@bot.tree.command(name="resync_timers", description="Force‑refresh all dashboards (admin only)")
 async def resync_timers(interaction: discord.Interaction):
     if not interaction.user.guild_permissions.administrator:
         return await interaction.response.send_message("❌ Admin only.", ephemeral=True)
-    # Refresh regular lists
+    # regular lists
     for name in get_all_list_names():
         await push_list_update(name)
-    # Refresh generator dashboards
+    # generator lists
     for name in get_all_gen_list_names():
         dash = get_gen_dashboard_id(name)
         if dash:
@@ -325,12 +322,12 @@ async def help_command(interaction: discord.Interaction):
         "/remove_name list_name:<list> name:<entry>\n"
         "/edit_name list_name:<list> old_name:<old> new_name:<new> new_category:<cat> new_comment:<optional>\n"
         "/delete_list name:<list>\n\n"
-        "/add_timer_to_list list_name:<list> name:<timer> hours:<int> minutes:<int>\n\n"
+        "/add_timer_to_list list_name:<list> name:<timer> hours:<int> minutes:<int>\n"
         "/add_text list_name:<list> text:<note>\n"
         "/add_header list_name:<list> header:<text>\n\n"
-        "/lists name:<list>        - show/update any dashboard\n"
-        "/list_all                - (Admin) list all lists\n"
-        "/resync_timers           - (Admin) force-refresh dashboards\n"
+        "/lists name:<list>\n"
+        "/list_all      - admin only\n"
+        "/resync_timers - admin only, force‑sync all\n"
     )
     await interaction.response.send_message(help_text, ephemeral=True)
 
