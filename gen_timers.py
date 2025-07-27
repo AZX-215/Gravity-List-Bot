@@ -27,10 +27,16 @@ def build_gen_embed(list_name: str) -> discord.Embed:
             rem_element = rem_shards // 100
             rem_shards = rem_shards % 100
             rem = max(0, int(item["timestamp"] + total_seconds - now))
-            h, r = divmod(rem, 3600)
+            # --- Days display logic START ---
+            d, rem_hr = divmod(rem, 86400)
+            h, r = divmod(rem_hr, 3600)
             m, s = divmod(r, 60)
-            # Everything on one line, with padding after emoji
-            timer_str = f"{emoji}   {item['name']} — {h:02d}h {m:02d}m {s:02d}s | Element: {rem_element} | Shards: {rem_shards}"
+            if d > 0:
+                time_str = f"{d}d {h:02d}h {m:02d}m {s:02d}s"
+            else:
+                time_str = f"{h:02d}h {m:02d}m {s:02d}s"
+            timer_str = f"{emoji}   {item['name']} — {time_str} | Element: {rem_element} | Shards: {rem_shards}"
+            # --- Days display logic END ---
         else:
             # 1 gas = 1h (3600s), 1 imbued = 4h (14400s)
             total_seconds = item["gas"] * 3600 + item["imbued"] * 14400
@@ -40,10 +46,16 @@ def build_gen_embed(list_name: str) -> discord.Embed:
             rem_gas = max(0, item["gas"] - gas_used)
             rem_imbued = max(0, item["imbued"] - imbued_used)
             rem = max(0, int(item["timestamp"] + total_seconds - now))
-            h, r = divmod(rem, 3600)
+            # --- Days display logic START ---
+            d, rem_hr = divmod(rem, 86400)
+            h, r = divmod(rem_hr, 3600)
             m, s = divmod(r, 60)
-            # Everything on one line, with padding after emoji
-            timer_str = f"{emoji}   {item['name']} — {h:02d}h {m:02d}m {s:02d}s | Gas: {rem_gas} | Imbued: {rem_imbued}"
+            if d > 0:
+                time_str = f"{d}d {h:02d}h {m:02d}m {s:02d}s"
+            else:
+                time_str = f"{h:02d}h {m:02d}m {s:02d}s"
+            timer_str = f"{emoji}   {item['name']} — {time_str} | Gas: {rem_gas} | Imbued: {rem_imbued}"
+            # --- Days display logic END ---
         embed.add_field(name=timer_str, value="\u200b", inline=False)
     return embed
 
