@@ -9,3 +9,6 @@ lists/
 __pycache__/
 *.py[cod]
 venv/
+
+# IDE
+.vs/
