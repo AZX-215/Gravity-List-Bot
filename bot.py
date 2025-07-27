@@ -46,15 +46,19 @@ def build_embed(list_name: str) -> discord.Embed:
     embed.add_field(name="\u200b", value="\u200b", inline=False)  # padding
 
     now = time.time()
-    # Sort: Header first, then normal/text
-    data.sort(key=lambda x: 1 if x.get("category") == "Header" else 3 if x.get("category") == "Text" else 2)
+    # Sort: Header first, then normal/text (3), others (2)
+    data.sort(key=lambda x: 1 if x.get("category") == "Header"
+                           else 3 if x.get("category") == "Text"
+                           else 2)
 
     for item in data:
         cat = item["category"]
         if cat == "Header":
             embed.add_field(name="\u200b", value=f"**{item['name']}**", inline=False)
+
         elif cat == "Text":
             embed.add_field(name=f"• {item['name']}", value="\u200b", inline=False)
+
         elif cat == "Timer":
             # inline timer uses absolute end timestamp
             end = item.get("timer_end", 0)
@@ -68,6 +72,7 @@ def build_embed(list_name: str) -> discord.Embed:
                 timestr = f"{h:02d}h {m:02d}m {s:02d}s"
             name_fld = f"⏳   {item['name']} — {timestr}"
             embed.add_field(name=name_fld, value="\u200b", inline=False)
+
         else:
             # normal categories (Owner, Enemy, Friend, Ally, Beta, Item)
             name_fld = f"{CATEGORY_EMOJIS.get(cat,'')}   {item['name']}"
@@ -81,10 +86,15 @@ def build_embed(list_name: str) -> discord.Embed:
 # ━━━━━━ Bot Startup ━━━━━━━━━━
 @bot.event
 async def on_ready():
-    await setup_timers(bot)
-    await setup_gen_timers(bot)
-    await bot.tree.sync()
-    print(f"Bot ready. Commands synced for {bot.user}")
+    # run setup only once to avoid duplicate registration errors
+    if not getattr(bot, "_startup_done", False):
+        await setup_timers(bot)
+        await setup_gen_timers(bot)
+        await bot.tree.sync()
+        print(f"Bot ready. Commands synced for {bot.user}")
+        bot._startup_done = True
+    else:
+        print(f"Bot reconnected: {bot.user}")
 
 # ━━━━━━ List Commands ━━━━━━━━━━
 @bot.tree.command(name="create_list", description="Create a new list")
@@ -256,7 +266,7 @@ async def lists(interaction: discord.Interaction, name: str):
 
     # Generator lists
     if name in get_all_list_names():
-        # safe fallback
+        # safe fallback—shouldn’t happen
         pass
 
     if name in get_all_gen_list_names():
