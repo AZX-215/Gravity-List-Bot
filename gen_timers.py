@@ -5,9 +5,17 @@ import discord
 from discord.ext import commands, tasks
 from discord import app_commands
 from data_manager import (
-    load_gen_list, save_gen_list, gen_list_exists, delete_gen_list, get_all_gen_list_names,
-    add_to_gen_list, get_all_gen_dashboards, get_gen_dashboard_id,
-    save_gen_dashboard_id, set_gen_list_role, get_gen_list_role
+    load_gen_list,
+    save_gen_list,
+    gen_list_exists,
+    delete_gen_list,
+    get_all_gen_list_names,
+    add_to_gen_list,
+    get_all_gen_dashboards,
+    get_gen_dashboard_id,
+    save_gen_dashboard_id,
+    set_gen_list_role,
+    get_gen_list_role
 )
 
 GEN_EMOJIS = {"Tek": "🔄", "Electrical": "⛽"}
@@ -17,6 +25,7 @@ def build_gen_embed(list_name: str) -> discord.Embed:
     data = load_gen_list(list_name)
     embed = discord.Embed(title=f"{list_name} Generators", color=0x404040)
     now = time.time()
+
     for item in data:
         emoji = GEN_EMOJIS.get(item["type"], "")
         start_time = item["timestamp"]
@@ -27,7 +36,7 @@ def build_gen_embed(list_name: str) -> discord.Embed:
             elapsed_shards = min(total_shards, int(elapsed / 648))
             rem_shards = max(0, total_shards - elapsed_shards)
             rem_element = rem_shards // 100
-            rem_shards = rem_shards % 100
+            rem_shards %= 100
             rem = max(0, int(start_time + total_seconds - now))
         else:
             total_seconds = item["gas"] * 3600 + item["imbued"] * 14400
@@ -37,7 +46,7 @@ def build_gen_embed(list_name: str) -> discord.Embed:
         d, rem_hr = divmod(rem, 86400)
         h, r = divmod(rem_hr, 3600)
         m, s = divmod(r, 60)
-        time_str = f"{h:02d}h {m:02d}m {s:02d}s" if d == 0 else f"{d}d {h:02d}h {m:02d}m {s:02d}s"
+        time_str = f"{d}d {h:02d}h {m:02d}m {s:02d}s" if d else f"{h:02d}h {m:02d}m {s:02d}s"
 
         if item["type"] == "Tek":
             timer_str = (
@@ -55,7 +64,6 @@ def build_gen_embed(list_name: str) -> discord.Embed:
             )
 
         embed.add_field(name=timer_str, value="​", inline=False)
-
     return embed
 
 
@@ -67,47 +75,48 @@ class GeneratorCog(commands.Cog):
     def cog_unload(self):
         self.generator_list_loop.cancel()
 
-    @tasks.loop(minutes=2)
+    @tasks.loop(minutes=5)
     async def generator_list_loop(self):
+        # Always update dashboards every loop
         for name, dash in get_all_gen_dashboards().items():
-            channel = None
-            message_id = None
+            channel, message_id = None, None
             if dash:
                 if isinstance(dash, (tuple, list)):
                     channel, message_id = dash
-                elif isinstance(dash, dict):
+                else:
                     channel = self.bot.get_channel(dash.get("channel_id"))
                     message_id = dash.get("message_id")
             if not channel or not message_id:
                 continue
+
             try:
                 msg = await channel.fetch_message(message_id)
                 await msg.edit(embed=build_gen_embed(name))
-                # throttle with jitter to avoid hitting rate limits
                 await asyncio.sleep(1 + random.random())
             except discord.errors.RateLimited as e:
-                print(f"[RateLimited] Sleeping for {e.retry_after}s before retry")
                 await asyncio.sleep(e.retry_after)
                 try:
                     msg = await channel.fetch_message(message_id)
                     await msg.edit(embed=build_gen_embed(name))
+                    await asyncio.sleep(1 + random.random())
                 except Exception as ex:
-                    print(f"[GenTimer Dashboard Retry] {ex}")
-                await asyncio.sleep(1 + random.random())
+                    print(f"[Dashboard Retry] {ex}")
             except Exception as e:
-                print(f"[GenTimer Dashboard] {e}")
+                print(f"[Dashboard Error] {e}")
 
+        # Expiry ping logic
         now = time.time()
         for list_name in get_all_gen_list_names():
             data = load_gen_list(list_name)
             ping_role = get_gen_list_role(list_name)
-            dash = save_gen_dashboard_id if False else get_gen_dashboard_id(list_name)
+            dash = get_gen_dashboard_id(list_name)
             channel = None
             if dash:
                 if isinstance(dash, (tuple, list)):
                     channel = self.bot.get_channel(dash[0])
-                elif isinstance(dash, dict):
+                else:
                     channel = self.bot.get_channel(dash.get("channel_id"))
+
             for item in data:
                 if not item.get("expired"):
                     dur = (
@@ -123,12 +132,11 @@ class GeneratorCog(commands.Cog):
                                 await channel.send(f"⚡ Generator **{item['name']}** expired! {mention}")
                                 await asyncio.sleep(1 + random.random())
                             except discord.errors.RateLimited as e:
-                                print(f"[Ping RateLimited] Sleeping for {e.retry_after}s")
                                 await asyncio.sleep(e.retry_after)
                                 await channel.send(f"⚡ Generator **{item['name']}** expired! {mention}")
                                 await asyncio.sleep(1 + random.random())
                             except Exception as e:
-                                print(f"[GenTimer Ping] {e}")
+                                print(f"[Ping Error] {e}")
             save_gen_list(list_name, data)
 
     @app_commands.command(
@@ -142,17 +150,18 @@ class GeneratorCog(commands.Cog):
             )
         await interaction.response.defer(thinking=True)
 
+        # manual force-sync
         for name, dash in get_all_gen_dashboards().items():
-            channel = None
-            message_id = None
+            channel, message_id = None, None
             if dash:
                 if isinstance(dash, (tuple, list)):
                     channel, message_id = dash
-                elif isinstance(dash, dict):
+                else:
                     channel = self.bot.get_channel(dash.get("channel_id"))
                     message_id = dash.get("message_id")
             if not channel or not message_id:
                 continue
+
             try:
                 msg = await channel.fetch_message(message_id)
                 await msg.edit(embed=build_gen_embed(name))
@@ -162,11 +171,11 @@ class GeneratorCog(commands.Cog):
                 try:
                     msg = await channel.fetch_message(message_id)
                     await msg.edit(embed=build_gen_embed(name))
+                    await asyncio.sleep(1 + random.random())
                 except Exception as ex:
                     print(f"[Manual Retry] {ex}")
-                await asyncio.sleep(1 + random.random())
             except Exception as e:
-                print(f"[GenTimer Manual Force Sync] {e}")
+                print(f"[Manual Force Sync Error] {e}")
 
         await interaction.followup.send(
             "✅ Force-refreshed all generator dashboards.", ephemeral=True
