@@ -12,31 +12,39 @@
 ## 📦 Key Features
 
 1. **Categorized Lists**  
-   - Create, add, edit, remove, delete entries with emojis: 👑 Owner | 🔴 Enemy | 🟢 Friend | 🔵 Ally | 🟡 Beta
-   - **Headers & Bullet Notes**: `/add_header` places a centered title; `/add_text` adds bullet points
+   - Create, add, edit, remove, delete entries with emojis: 👑 Owner | 🔴 Enemy | 🟢 Friend | 🔵 Ally | 🟡 Beta | ⚫ Item  
+   - **Headers & Bullet Notes**: `/add_header list_name:<list> header:<text>` places a centered title; `/add_text list_name:<list> text:<note>` adds bullet points
 
 2. **Inline Timers in Lists**  
-   - `/add_timer_to_list list_name name hours minutes` adds a ⏳ timer entry
-   - **Auto‑refresh**: Only lists that contain inline timers are refreshed every 3 seconds in the background
-   - **Force‑resync**: A background loop every 1 minute ensures accuracy; `/resync_timers` (admin) re‑syncs all list dashboards on demand
+   - `/add_timer_to_list list_name:<list> name:<timer> hours:<int> minutes:<int>` adds a ⏳ timer entry  
+   - **Auto‑refresh**: Only lists that contain timers are refreshed every 3 seconds  
+   - **Force‑resync**: `/resync_timers` (admin) re‑syncs all dashboards on demand
 
 3. **Standalone Countdown Timers**  
-   - `/create_timer`, `/pause_timer`, `/resume_timer`, `/delete_timer`  
-   - Updates every second in your channel  
-   - `/resync_timers` command also refreshes these embeds in lists dashboards
+   - `/create_timer name:<timer> hours:<int> minutes:<int> [role:<@role>]`  
+   - `/pause_timer name:<timer>`  
+   - `/resume_timer name:<timer>`  
+   - `/delete_timer name:<timer>`  
+   - **Force‑resync**: `/resync_timers` (admin) also refreshes all timer messages
 
 4. **Generator Timers (Ark Ascended)**  
-   - `/create_generator_list` to start a fresh generator list  
-   - `/add_generator`, `/edit_generator`, `/remove_generator`, `/delete_generator_list`
-   - Tracks Tek and Electrical fuel durations with live countdown  
-   - **Dashboards** auto‑refresh every 2 minutes with expiry pings
+   - `/create_gen_list name:<list>` to start a new generator list  
+   - `/add_gen tek list_name:<list> entry_name:<name> element:<int> shards:<int>`  
+   - `/add_gen electrical list_name:<list> entry_name:<name> gas:<int> imbued:<int>`  
+   - `/edit_gen list_name:<list> old_name:<old> [--new_name:<new>] [--gen_type:<Tek|Electrical>] [--element:<int>] [--shards:<int>] [--gas:<int>] [--imbued:<int>]`  
+   - `/remove_gen list_name:<list> name:<entry>`  
+   - `/delete_gen_list name:<list>`  
+   - `/set_gen_role list_name:<list> role:<@role>` to set ping role  
+   - `/list_gen_lists` lists all generator lists (admin)  
+   - **Force‑resync**: `/resync_gens` (admin) force‑refreshes all generator dashboards  
+   - **Auto‑refresh**: Dashboards update every 5 minutes with expiry pings
 
 5. **Unified Dashboards**  
-   - `/lists <name>` shows or refreshes any regular, inline‑timer, or generator list embed  
-   - Background tasks handle updates with minimal overhead (only timers lists)
+   - `/lists name:<list>` shows or updates any regular, inline‑timer, or generator list embed  
+   - Background tasks handle updates efficiently
 
 6. **Overview & Help**  
-   - `/list_all` (Admin only) lists all regular & generator list names
+   - `/list_all` (admin only) lists all regular & generator list names  
    - `/help` displays the full command list and usage
 
 7. **JSON‑backed Persistence**  
@@ -75,9 +83,9 @@
 
 ## ☁️ Deployment Notes
 
-- **Frequency Tweaks**: Inline‐timer lists update every 3 seconds; force‑resync loop runs every minute.
-- **Commands to Monitor**: Check `/resync_timers` for manual dashboard refreshes.
-- **Railway Deployment**: Same as before, ensure volume mount at `/app/lists`.
+- **Frequency Tweaks**: Inline‐timer lists update every 3 seconds; generator dashboards update every 5 minutes.  
+- **Commands to Monitor**: Check `/resync_timers` for manual timer refresh and `/resync_gens` for generator dashboards.  
+- **Railway Deployment**: Ensure volume mount at `/app/lists`.
 
 ---
 
