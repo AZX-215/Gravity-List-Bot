@@ -1,55 +1,46 @@
-# Gravity List Bot (v3.2)
+# Gravity List Bot
 
 **Gravity List Bot** is a Discord bot designed to help your community:
 
-- **Track categorized lists** with emojis: 👑 Owner, 🔴 Enemy, 🟢 Friend, 🔵 Ally, 🟡 Beta, ⚫ Item
-- **Inline timers** embedded in lists (countdown to days/h/m/s)
-- **Standalone countdown timers**
-- **Generator timers** (Ark Ascended Tek & Electrical)
-- **Custom headers & notes**
-- **Unified dashboards** with auto-refresh
-- **Optional comments** on list entries
-- **Persistent JSON storage**
+- **Track categorized lists** (headers, bullet notes, alliances, enemies, owners)
+- **Run real‑time countdown timers** as standalone or embedded in lists
+- **Manage Ark Ascended generator timers** (Tek & Electrical) with auto‑updating dashboards
+- **Persist all data** via JSON files in a mounted volume (`lists/` directory)
 
 ---
 
 ## 📦 Key Features
 
 1. **Categorized Lists**  
-   - `/create_list`, `/add_name`, `/edit_name`, `/remove_name`, `/delete_list`  
-   - Supports categories: Owner (👑), Enemy (🔴), Friend (🟢), Ally (🔵), Beta (🟡), Item (⚫)  
-   - Optional `comment` on `/add_name`, rendered italic below the entry
+   - Create, add, edit, remove, delete entries with emojis: 👑 Owner | 🔴 Enemy | 🟢 Friend | 🔵 Ally | 🟡 Beta
+   - **Headers & Bullet Notes**: `/add_header` places a centered title; `/add_text` adds bullet points
 
-2. **Custom Headers & Notes**  
-   - `/add_header` sets a centered header at the top of a list  
-   - `/add_text` appends a freeform bullet note at the bottom
+2. **Inline Timers in Lists**  
+   - `/add_timer_to_list list_name name hours minutes` adds a ⏳ timer entry
+   - **Auto‑refresh**: Only lists that contain inline timers are refreshed every 3 seconds in the background
+   - **Force‑resync**: A background loop every 1 minute ensures accuracy; `/resync_timers` (admin) re‑syncs all list dashboards on demand
 
-3. **Inline Timers in Lists**  
-   - `/add_timer_to_list` adds a ⏳ timer entry to any existing list  
-   - Countdown displays days/hours/minutes/seconds  
-   - Dashboards auto-update every **3 seconds** for lists containing timers
-
-4. **Standalone Countdown Timers**  
+3. **Standalone Countdown Timers**  
    - `/create_timer`, `/pause_timer`, `/resume_timer`, `/delete_timer`  
-   - Embeds update every second; optional role ping on expiry
+   - Updates every second in your channel  
+   - `/resync_timers` command also refreshes these embeds in lists dashboards
 
-5. **Generator Timers (Ark Ascended)**  
-   - `/create_generator_list`, `/add_generator`, `/edit_generator`, `/remove_generator`, `/delete_generator_list`  
-   - Tracks Tek & Electrical durations with days support
+4. **Generator Timers (Ark Ascended)**  
+   - `/create_generator_list` to start a fresh generator list  
+   - `/add_generator`, `/edit_generator`, `/remove_generator`, `/delete_generator_list`
+   - Tracks Tek and Electrical fuel durations with live countdown  
+   - **Dashboards** auto‑refresh every 2 minutes with expiry pings
 
-6. **Unified Dashboards**  
-   - `/lists <name>` shows or refreshes any regular or generator dashboard  
-   - Auto-refresh on changes and via `/resync_timers` every 3 seconds for timer lists  
-   - `/resync_timers` now force-refreshes **all** dashboards (regular & generator)
+5. **Unified Dashboards**  
+   - `/lists <name>` shows or refreshes any regular, inline‑timer, or generator list embed  
+   - Background tasks handle updates with minimal overhead (only timers lists)
 
-7. **Overview of All Lists**  
-   - `/list_all` (Admin only) lists all regular & generator lists
+6. **Overview & Help**  
+   - `/list_all` (Admin only) lists all regular & generator list names
+   - `/help` displays the full command list and usage
 
-8. **Help & Utility**  
-   - `/help` displays usage instructions and all commands
-
-9. **JSON‑Backed Persistence**  
-   - All data stored as JSON under `lists/`  
+7. **JSON‑backed Persistence**  
+   - Data lives under `lists/` (including `generator_lists/`)  
    - Volume mount (`/app/lists`) ensures data survives redeploys
 
 ---
@@ -82,36 +73,17 @@
 
 ---
 
-## ☁️ Railway Deployment
+## ☁️ Deployment Notes
 
-1. **Connect GitHub** and select this repo.
-2. **Variables** → add:
-   - `DISCORD_TOKEN`
-   - `CLIENT_ID`
-   - `DATABASE_PATH=lists/data.json`
-3. **Volumes** → mount a volume to `/app/lists`
-4. **Settings**:
-   - Disable **Serverless**
-   - Start command: `python bot.py`
-5. **Deploy** → check **Service Logs** for:
-   ```
-   Bot ready. Commands synced for Gravity List
-   ```
-
----
-
-## ✅ OAuth2 & Permissions
-
-**Scopes**: `applications.commands` + `bot`  
-**Permissions**: Send Messages, Embed Links, Read History, Use Application Commands
+- **Frequency Tweaks**: Inline‐timer lists update every 3 seconds; force‑resync loop runs every minute.
+- **Commands to Monitor**: Check `/resync_timers` for manual dashboard refreshes.
+- **Railway Deployment**: Same as before, ensure volume mount at `/app/lists`.
 
 ---
 
 ## 🤝 Contributing
 
 PRs & issues welcome! Feel free to add features like pagination, role‑based controls, etc.
-
----
 
 ## 📜 License
 
