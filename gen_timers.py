@@ -17,12 +17,15 @@ from data_manager import (
     set_gen_list_role,
     get_gen_list_role
 )
+import os
 
 # Thumbnails and colors
 TEK_THUMBNAIL = "https://raw.githubusercontent.com/AZX-215/Gravity-List-Bot/refs/heads/main/images/Tek_Generator.png"
 TEK_COLOR = 0x0099FF
 ELEC_COLOR = 0xFFC300
 GEN_EMOJIS = {"Tek": "⚡", "Electrical": "🔌"}
+
+BACKOFF_SECONDS = 10 * 60  # 10 minutes
 
 def build_gen_embed(list_name: str) -> discord.Embed:
     data = load_gen_list(list_name)
@@ -47,13 +50,11 @@ def build_gen_embed(list_name: str) -> discord.Embed:
         elem_sec    = init_elem * 64800
         elapsed     = max(0, now - start)
 
-        # Remaining
         rem_shards  = max(0, init_shards - int(elapsed / 648)) if shard_sec > 0 else init_shards
         rem_elem    = max(0, init_elem   - int((elapsed - (init_shards * 648)) / 64800)) if elem_sec > 0 else init_elem
 
         end_ts = int(start + (init_shards * 648) + (init_elem * 64800))
         mins_left = int((end_ts - now) / 60)
-        # Determine status
         if rem_elem == 0 and rem_shards == 0 or mins_left <= 0:
             status_emoji = "❌"
             status_text = "Offline"
@@ -63,7 +64,6 @@ def build_gen_embed(list_name: str) -> discord.Embed:
         else:
             status_emoji = "🔋"
             status_text = "Online"
-        # Format line
         return (
             f"**{emoji} {item['name']}**\n"
             f"Element Left: **{rem_elem}**\n"
@@ -83,7 +83,6 @@ def build_gen_embed(list_name: str) -> discord.Embed:
         rem_imbued = max(0, imbued - int(elapsed / 14400)) if imbued > 0 else imbued
         end_ts = int(start + dur)
         mins_left = int((end_ts - now) / 60)
-        # Determine status
         if rem_gas == 0 and rem_imbued == 0 or mins_left <= 0:
             status_emoji = "❌"
             status_text = "Offline"
@@ -101,19 +100,26 @@ def build_gen_embed(list_name: str) -> discord.Embed:
             f"{status_emoji} Status: {status_text}"
         )
 
-    # Add fields
     if tek_items:
         lines = [format_tek(it) for it in tek_items]
         embed.add_field(name="⚡ Tek Generators", value="\n\n".join(lines), inline=False)
     if elec_items:
-        # For visual separation, set color on field text itself
         lines = [format_elec(it) for it in elec_items]
         embed.add_field(name="🔌 Electrical Generators", value="\n\n".join(lines), inline=False)
-
     if not tek_items and not elec_items:
         embed.description = "No generators in this list."
-
     return embed
+
+async def log_to_channel(bot, message):
+    try:
+        log_channel_id = int(os.environ.get("LOG_CHANNEL_ID", "0"))
+        if not log_channel_id:
+            return
+        channel = bot.get_channel(log_channel_id)
+        if channel:
+            await channel.send(message)
+    except Exception as e:
+        print(f"[Logging] Failed to send log: {e}")
 
 async def refresh_dashboard(bot: commands.Bot, list_name: str):
     dash = get_gen_dashboard_id(list_name)
@@ -129,24 +135,50 @@ async def refresh_dashboard(bot: commands.Bot, list_name: str):
     try:
         msg = await channel.fetch_message(message_id)
         await msg.edit(embed=build_gen_embed(list_name))
-    except Exception:
-        pass
+    except discord.errors.HTTPException as e:
+        if e.status == 429:
+            raise  # We'll handle this at the loop level!
+        else:
+            await log_to_channel(bot, f"Error updating dashboard `{list_name}`: {e}")
+    except Exception as e:
+        await log_to_channel(bot, f"Error updating dashboard `{list_name}`: {e}")
 
 class GeneratorCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
         self.generator_list_loop.start()
+        self.backoff_until = 0
 
     def cog_unload(self):
         self.generator_list_loop.cancel()
 
     @tasks.loop(minutes=5)
     async def generator_list_loop(self):
-        # Batch update each dashboard with a stagger to avoid bursts
+        # Only one update loop—stagger within it!
+        now = time.time()
+        if now < getattr(self, 'backoff_until', 0):
+            # Still backing off
+            return
+
         for name in get_all_gen_list_names():
-            await refresh_dashboard(self.bot, name)
-            await asyncio.sleep(1)  # stagger updates by 1s
-        # Check for expirations (existing logic)
+            try:
+                await refresh_dashboard(self.bot, name)
+            except discord.errors.HTTPException as e:
+                if e.status == 429:
+                    # Hit a rate limit!
+                    self.backoff_until = time.time() + BACKOFF_SECONDS
+                    await log_to_channel(
+                        self.bot,
+                        f"⚠️ **Rate limit detected!**\nPausing all generator dashboard updates for {BACKOFF_SECONDS//60} minutes."
+                    )
+                    return  # Stop trying to update others this loop
+                else:
+                    await log_to_channel(self.bot, f"Dashboard update error for `{name}`: {e}")
+            except Exception as e:
+                await log_to_channel(self.bot, f"Dashboard update error for `{name}`: {e}")
+            await asyncio.sleep(1)  # Stagger updates (never all at once)
+
+        # Check for expired gens and ping (as before)
         now = time.time()
         changed = False
         for list_name in get_all_gen_list_names():
