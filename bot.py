@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 from data_manager import (
     load_list, save_list, list_exists, delete_list,
     get_all_list_names, get_all_gen_list_names,
-    save_dashboard_id, get_dashboard_id
+    save_dashboard_id, get_dashboard_id, get_gen_dashboard_id
 )
 from timers import setup as setup_timers
 from gen_timers import setup as setup_gen_timers, build_gen_embed as build_gen_dashboard_embed
@@ -27,7 +27,7 @@ CATEGORY_EMOJIS = {
     "Ally":  "🔵",  "Beta":  "🟡",  "Item":  "⚫", "Timer":"⏳"
 }
 
-# ━━━━━━ List Embed & Update ━━━━━━━━━━
+# ━━━━━━ Embed & Dashboard Helpers ━━━━━━━━━━
 async def push_list_update(list_name: str):
     dash = get_dashboard_id(list_name)
     if dash:
@@ -43,7 +43,7 @@ async def push_list_update(list_name: str):
 def build_embed(list_name: str) -> discord.Embed:
     data = load_list(list_name)
     embed = discord.Embed(title=f"{list_name} List", color=0x808080)
-    embed.add_field(name="\u200b", value="\u200b", inline=False)  # padding
+    embed.add_field(name="\u200b", value="\u200b", inline=False)
 
     now = time.time()
     data.sort(key=lambda x: 1 if x.get("category") == "Header"
@@ -51,7 +51,7 @@ def build_embed(list_name: str) -> discord.Embed:
                            else 2)
 
     for item in data:
-        cat = item["category"]
+        cat = item.get("category")
         if cat == "Header":
             embed.add_field(name="\u200b", value=f"**{item['name']}**", inline=False)
 
@@ -59,11 +59,11 @@ def build_embed(list_name: str) -> discord.Embed:
             embed.add_field(name=f"• {item['name']}", value="\u200b", inline=False)
 
         elif cat == "Timer":
-            end = item.get("timer_end", 0)
-            rem = max(0, int(end - now))
+            end_ts = item.get("timer_end", 0)
+            rem = max(0, int(end_ts - now))
             d, rem_hr = divmod(rem, 86400)
-            h, r      = divmod(rem_hr, 3600)
-            m, s      = divmod(r, 60)
+            h, r = divmod(rem_hr, 3600)
+            m, s = divmod(r, 60)
             timestr = f"{d}d {h:02d}h {m:02d}m {s:02d}s" if d else f"{h:02d}h {m:02d}m {s:02d}s"
             embed.add_field(name=f"⏳   {item['name']} — {timestr}", value="\u200b", inline=False)
 
@@ -78,13 +78,16 @@ def build_embed(list_name: str) -> discord.Embed:
 # ━━━━━━ On Ready Guarded ━━━━━━━━━━
 @bot.event
 async def on_ready():
-    # Only do setup once to avoid CommandAlreadyRegistered
     if not getattr(bot, "_startup_done", False):
-        await setup_timers(bot)
-        await setup_gen_timers(bot)
-        await bot.tree.sync()
-        print(f"Bot ready. Commands synced for {bot.user}")
-        bot._startup_done = True
+        try:
+            await setup_timers(bot)
+            await setup_gen_timers(bot)
+            await bot.tree.sync()
+            print(f"Bot ready. Commands synced for {bot.user}")
+        except app_commands.errors.CommandAlreadyRegistered as e:
+            print(f"[Startup] Some commands were already registered: {e}")
+        finally:
+            bot._startup_done = True
     else:
         print(f"Bot reconnected: {bot.user}")
 
@@ -225,7 +228,7 @@ async def add_header(interaction: discord.Interaction, list_name: str, header: s
     data = [e for e in load_list(list_name) if e.get("category") != "Header"]
     data.insert(0, {"name": header, "category": "Header"})
     save_list(list_name, data)
-    await interaction.response.send_message(f"🏷️ Set header for '{list_name}'.", ephemeral=True)
+    await interaction.response.send_message(f"�🏷️ Set header for '{list_name}'.", ephemeral=True)
     await push_list_update(list_name)
 
 @bot.tree.command(name="lists", description="Show or update any list dashboard")
@@ -233,7 +236,7 @@ async def add_header(interaction: discord.Interaction, list_name: str, header: s
 async def lists(interaction: discord.Interaction, name: str):
     if list_exists(name):
         embed = build_embed(name)
-        dash  = get_dashboard_id(name)
+        dash = get_dashboard_id(name)
         if dash:
             ch_id, msg_id = dash
             ch = interaction.guild.get_channel(ch_id)
@@ -251,7 +254,6 @@ async def lists(interaction: discord.Interaction, name: str):
 
     if name in get_all_gen_list_names():
         embed = build_gen_dashboard_embed(name)
-        from data_manager import get_gen_dashboard_id, save_gen_dashboard_id
         dash = get_gen_dashboard_id(name)
         if dash:
             ch_id, msg_id = dash
@@ -279,13 +281,26 @@ async def list_all(interaction: discord.Interaction):
     embed = discord.Embed(title="All Lists", description="\n".join(lines) or "No lists found.", color=0x808080)
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
-@bot.tree.command(name="resync_timers", description="Force-refresh all list dashboards (admin only)")
+@bot.tree.command(name="resync_timers", description="Force-refresh all list & generator dashboards (admin only)")
 async def resync_timers(interaction: discord.Interaction):
     if not interaction.user.guild_permissions.administrator:
         return await interaction.response.send_message("❌ Admin only.", ephemeral=True)
+    # Refresh regular lists
     for name in get_all_list_names():
         await push_list_update(name)
-    await interaction.response.send_message("✅ All list dashboards re‑synced.", ephemeral=True)
+    # Refresh generator dashboards
+    for name in get_all_gen_list_names():
+        dash = get_gen_dashboard_id(name)
+        if dash:
+            ch_id, msg_id = dash
+            ch = interaction.guild.get_channel(ch_id)
+            if ch:
+                try:
+                    msg = await ch.fetch_message(msg_id)
+                    await msg.edit(embed=build_gen_dashboard_embed(name))
+                except:
+                    pass
+    await interaction.response.send_message("✅ All dashboards re‑synced.", ephemeral=True)
 
 @bot.tree.command(name="help", description="Show usage instructions")
 async def help_command(interaction: discord.Interaction):
@@ -301,7 +316,7 @@ async def help_command(interaction: discord.Interaction):
         "/add_header list_name:<list> header:<text>\n\n"
         "/lists name:<list>        - show/update any dashboard\n"
         "/list_all                - (Admin) list all lists\n"
-        "/resync_timers           - (Admin) force-refresh list dashboards\n"
+        "/resync_timers           - (Admin) force-refresh dashboards\n"
     )
     await interaction.response.send_message(help_text, ephemeral=True)
 

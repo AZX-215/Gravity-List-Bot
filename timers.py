@@ -3,6 +3,7 @@ import uuid
 import discord
 from discord.ext import commands, tasks
 from discord import app_commands
+from discord.app_commands import CommandAlreadyRegistered
 from data_manager import load_timers, add_timer, save_timers, remove_timer
 
 POLL_INTERVAL = 1  # update every second
@@ -43,7 +44,6 @@ class TimerCog(commands.Cog):
         )
         embed.description = f"{status} — {timer_str}"
 
-        # Ping role or owner
         if data.get("role_id"):
             embed.set_footer(text=f"Pings: <@&{data['role_id']}>")
         elif data.get("owner_id"):
@@ -177,7 +177,6 @@ class TimerCog(commands.Cog):
             channel = self.bot.get_channel(data["channel_id"])
             expired = data.get("expired", False)
             now = time.time()
-            # Expire detection
             if not expired and not data.get("paused", False) and now >= data["end_time"]:
                 data["expired"] = True
                 changed = True
@@ -191,7 +190,6 @@ class TimerCog(commands.Cog):
                         await channel.send(f"⏰ Timer **{data['name']}** expired! {ping}")
                     except Exception as e:
                         print(f"[Timer Ping] Error: {e}")
-            # Always update embed
             if channel:
                 try:
                     msg = await channel.fetch_message(data["message_id"])
@@ -216,4 +214,7 @@ class TimerCog(commands.Cog):
                     pass
 
 async def setup(bot: commands.Bot):
-    await bot.add_cog(TimerCog(bot))
+    try:
+        await bot.add_cog(TimerCog(bot))
+    except CommandAlreadyRegistered:
+        print("[TimerCog] Commands already registered, skipping registration.")
