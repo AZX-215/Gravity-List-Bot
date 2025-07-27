@@ -8,8 +8,10 @@ from dotenv import load_dotenv
 from data_manager import (
     load_list, save_list, list_exists, delete_list,
     get_all_list_names, get_all_gen_list_names,
-    save_dashboard_id, get_dashboard_id, get_gen_dashboard_id
+    save_dashboard_id, get_dashboard_id, get_gen_dashboard_id,
+    save_gen_dashboard_id
 )
+
 from timers import setup as setup_timers
 from gen_timers import setup as setup_gen_timers, build_gen_embed as build_gen_dashboard_embed
 
