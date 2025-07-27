@@ -149,3 +149,6 @@ async def setup(bot: commands.Bot):
         await bot.add_cog(GeneratorCog(bot))
     except CommandAlreadyRegistered:
         print("[GeneratorCog] Commands already registered, skipping registration.")
+
+# Alias for compatibility
+build_gen_dashboard_embed = build_gen_embed
