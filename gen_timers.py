@@ -59,7 +59,7 @@ def build_gen_embed(list_name: str) -> discord.Embed:
                 f"Gas: {rem_gas} | Imbued: {rem_imbued}"
             )
 
-        embed.add_field(name=timer_str, value="\u200b", inline=False)
+        embed.add_field(name=timer_str, value="​", inline=False)
 
     return embed
 
@@ -277,6 +277,11 @@ class GeneratorCog(commands.Cog):
             return await interaction.response.send_message(
                 "❌ Admin only.", ephemeral=True
             )
+
+        # tell Discord we’re working on it (prevents timeouts)
+        await interaction.response.defer(thinking=True)
+
+        # 1. Manual force-sync of dashboards
         for name, dash in get_all_gen_dashboards().items():
             channel = None
             message_id = None
@@ -293,7 +298,9 @@ class GeneratorCog(commands.Cog):
                 await msg.edit(embed=build_gen_embed(name))
             except Exception as e:
                 print(f"[GenTimer Manual Force Sync] Error: {e}")
-        await interaction.response.send_message(
+
+        # send final confirmation
+        await interaction.followup.send(
             "✅ Force-refreshed all generator dashboards.", ephemeral=True
         )
 
