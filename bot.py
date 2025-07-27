@@ -60,7 +60,6 @@ def build_embed(list_name: str) -> discord.Embed:
             embed.add_field(name=f"• {item['name']}", value="\u200b", inline=False)
 
         elif cat == "Timer":
-            # inline timer uses absolute end timestamp
             end = item.get("timer_end", 0)
             rem = max(0, int(end - now))
             d, rem_hr = divmod(rem, 86400)
@@ -74,10 +73,8 @@ def build_embed(list_name: str) -> discord.Embed:
             embed.add_field(name=name_fld, value="\u200b", inline=False)
 
         else:
-            # normal categories (Owner, Enemy, Friend, Ally, Beta, Item)
             name_fld = f"{CATEGORY_EMOJIS.get(cat,'')}   {item['name']}"
             embed.add_field(name=name_fld, value="\u200b", inline=False)
-            # optional comment below
             if item.get("comment"):
                 embed.add_field(name="\u200b", value=f"*{item['comment']}*", inline=False)
 
@@ -265,10 +262,6 @@ async def lists(interaction: discord.Interaction, name: str):
         return
 
     # Generator lists
-    if name in get_all_list_names():
-        # safe fallback—shouldn’t happen
-        pass
-
     if name in get_all_gen_list_names():
         embed = build_gen_dashboard_embed(name)
         from data_manager import get_gen_dashboard_id, save_gen_dashboard_id
@@ -279,8 +272,7 @@ async def lists(interaction: discord.Interaction, name: str):
             if ch:
                 try:
                     msg = await ch.fetch_message(msg_id)
-                    await interaction.response.send_message(f"✅ Refreshed generator '{name}'.", embed=embed, ephemeral=True)
-                    return
+                    return await interaction.response.send_message(f"✅ Refreshed generator '{name}'.", embed=embed, ephemeral=True)
                 except:
                     pass
         await interaction.response.send_message(embed=embed)
@@ -313,7 +305,7 @@ async def resync_timers(interaction: discord.Interaction):
 @bot.tree.command(name="help", description="Show usage instructions")
 async def help_command(interaction: discord.Interaction):
     help_text = (
-        "**Gravity List Bot v3.2 Commands**\n\n"
+        "**Gravity List Bot Commands**\n\n"
         "/create_list name:<list>\n"
         "/add_name list_name:<list> name:<entry> category:<cat> comment:<optional>\n"
         "/remove_name list_name:<list> name:<entry>\n"
