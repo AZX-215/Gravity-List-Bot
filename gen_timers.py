@@ -1,4 +1,5 @@
 import time
+import asyncio
 import discord
 from discord.ext import commands, tasks
 from discord import app_commands
@@ -18,7 +19,6 @@ def build_gen_embed(list_name: str) -> discord.Embed:
         emoji = GEN_EMOJIS.get(item["type"], "")
         start_time = item["timestamp"]
         if item["type"] == "Tek":
-            # 1 element = 18h (64800s), 100 shards = 18h, 1 shard = 648s
             total_seconds = item["element"] * 64800 + item["shards"] * 648
             elapsed = max(0, now - start_time)
             total_shards = item["shards"] + item["element"] * 100
@@ -28,12 +28,10 @@ def build_gen_embed(list_name: str) -> discord.Embed:
             rem_shards = rem_shards % 100
             rem = max(0, int(item["timestamp"] + total_seconds - now))
         else:
-            # 1 gas = 1h (3600s), 1 imbued = 4h (14400s)
             total_seconds = item["gas"] * 3600 + item["imbued"] * 14400
             elapsed = max(0, now - start_time)
             rem = max(0, int(item["timestamp"] + total_seconds - now))
 
-        # --- Days display logic START ---
         d, rem_hr = divmod(rem, 86400)
         h, r      = divmod(rem_hr, 3600)
         m, s      = divmod(r, 60)
@@ -41,7 +39,6 @@ def build_gen_embed(list_name: str) -> discord.Embed:
             time_str = f"{d}d {h:02d}h {m:02d}m {s:02d}s"
         else:
             time_str = f"{h:02d}h {m:02d}m {s:02d}s"
-        # --- Days display logic END ---
 
         if item["type"] == "Tek":
             timer_str = (
@@ -49,7 +46,6 @@ def build_gen_embed(list_name: str) -> discord.Embed:
                 f"Element: {rem_element} | Shards: {rem_shards}"
             )
         else:
-            # Gas/Energy
             gas_used    = min(item["gas"], int(elapsed // 3600))
             imbued_used = min(item["imbued"], int(elapsed // 14400))
             rem_gas     = max(0, item["gas"] - gas_used)
@@ -89,6 +85,19 @@ class GeneratorCog(commands.Cog):
             try:
                 msg = await channel.fetch_message(message_id)
                 await msg.edit(embed=build_gen_embed(name))
+                # throttle edits to avoid rate limits
+                await asyncio.sleep(1)
+            except discord.HTTPException as e:
+                # if rate limited, wait and retry once
+                retry_after = getattr(e, 'retry_after', 5)
+                await asyncio.sleep(retry_after)
+                try:
+                    msg = await channel.fetch_message(message_id)
+                    await msg.edit(embed=build_gen_embed(name))
+                except Exception as ex:
+                    print(f"[GenTimer Dashboard Retry] Error: {ex}")
+                # short delay after retry
+                await asyncio.sleep(1)
             except Exception as e:
                 print(f"[GenTimer Dashboard] Error: {e}")
 
@@ -117,6 +126,8 @@ class GeneratorCog(commands.Cog):
                         if channel:
                             try:
                                 await channel.send(f"⚡ Generator **{item['name']}** expired! {mention}")
+                                # brief pause to respect rate limits
+                                await asyncio.sleep(1)
                             except Exception as e:
                                 print(f"[GenTimer Ping] Error: {e}")
             save_gen_list(list_name, data)
@@ -278,10 +289,10 @@ class GeneratorCog(commands.Cog):
                 "❌ Admin only.", ephemeral=True
             )
 
-        # tell Discord we’re working on it (prevents timeouts)
+        # defer to prevent timeout
         await interaction.response.defer(thinking=True)
 
-        # 1. Manual force-sync of dashboards
+        # Manual force-sync of dashboards
         for name, dash in get_all_gen_dashboards().items():
             channel = None
             message_id = None
@@ -296,6 +307,16 @@ class GeneratorCog(commands.Cog):
             try:
                 msg = await channel.fetch_message(message_id)
                 await msg.edit(embed=build_gen_embed(name))
+                await asyncio.sleep(1)
+            except discord.HTTPException as e:
+                retry_after = getattr(e, 'retry_after', 5)
+                await asyncio.sleep(retry_after)
+                try:
+                    msg = await channel.fetch_message(message_id)
+                    await msg.edit(embed=build_gen_embed(name))
+                except Exception as ex:
+                    print(f"[GenTimer Manual Retry] Error: {ex}")
+                await asyncio.sleep(1)
             except Exception as e:
                 print(f"[GenTimer Manual Force Sync] Error: {e}")
 
