@@ -2,6 +2,7 @@ import os
 import time
 import discord
 import logging
+import traceback
 from discord.ext import commands
 from discord import app_commands
 from dotenv import load_dotenv
@@ -81,6 +82,19 @@ def build_embed(list_name: str) -> discord.Embed:
 
     return embed
 
+# ━━━ Log to channel utility ━━━
+async def log_to_channel(bot, message):
+    """Posts a log message to your Discord log channel, if set."""
+    try:
+        log_channel_id = int(os.environ.get("LOG_CHANNEL_ID", "0"))
+        if not log_channel_id:
+            return
+        channel = bot.get_channel(log_channel_id)
+        if channel:
+            await channel.send(message)
+    except Exception as e:
+        logger.error(f"Failed to send log to Discord channel: {e}")
+
 @bot.event
 async def on_ready():
     if not getattr(bot, "_setup_done", False):
@@ -93,6 +107,17 @@ async def on_ready():
         print(f"Bot ready. Commands synced for {bot.user}")
     else:
         print(f"Bot reconnected: {bot.user}")
+
+# ━━━ Global error handler ━━━
+@bot.event
+async def on_error(event, *args, **kwargs):
+    err = traceback.format_exc()
+    msg = ""
+    if "429" in err or "rate limited" in err or "Error 1015" in err:
+        msg += "⚠️ **Rate limit detected:** Discord or Cloudflare returned 429/1015.\n"
+        msg += "Bot may be temporarily blocked from sending or editing messages. Please check your dashboard update intervals!\n"
+    msg += f"Event: `{event}`\n```py\n{err[:1500]}```"
+    await log_to_channel(bot, msg)
 
 # ━━━ Slash Commands ━━━
 
