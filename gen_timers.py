@@ -70,7 +70,6 @@ async def refresh_dashboard(bot: commands.Bot, list_name: str):
     dash = get_gen_dashboard_id(list_name)
     if not dash:
         return
-    # dash may be tuple/list or dict
     channel_id, message_id = (tuple(dash) if isinstance(dash, (tuple, list))
                               else (dash.get("channel_id"), dash.get("message_id")))
     channel = bot.get_channel(channel_id)
