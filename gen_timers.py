@@ -66,6 +66,22 @@ def build_gen_embed(list_name: str) -> discord.Embed:
         embed.add_field(name=timer_str, value="\u200b", inline=False)
     return embed
 
+async def refresh_dashboard(bot: commands.Bot, list_name: str):
+    dash = get_gen_dashboard_id(list_name)
+    if not dash:
+        return
+    # dash may be tuple/list or dict
+    channel_id, message_id = (tuple(dash) if isinstance(dash, (tuple, list))
+                              else (dash.get("channel_id"), dash.get("message_id")))
+    channel = bot.get_channel(channel_id)
+    if not channel:
+        return
+    try:
+        msg = await channel.fetch_message(message_id)
+        await msg.edit(embed=build_gen_embed(list_name))
+    except Exception:
+        pass
+
 class GeneratorCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
@@ -76,38 +92,15 @@ class GeneratorCog(commands.Cog):
 
     @tasks.loop(minutes=5)
     async def generator_list_loop(self):
-        # Refresh all dashboards
-        for name, dash in get_all_gen_dashboards().items():
-            channel, message_id = (dash if isinstance(dash, (tuple, list))
-                                   else (self.bot.get_channel(dash.get("channel_id")), dash.get("message_id")))
-            if not channel or not message_id:
-                continue
-            try:
-                msg = await channel.fetch_message(message_id)
-                await msg.edit(embed=build_gen_embed(name))
-                await asyncio.sleep(1 + random.random())
-            except discord.errors.RateLimited as e:
-                await asyncio.sleep(e.retry_after)
-                try:
-                    msg = await channel.fetch_message(message_id)
-                    await msg.edit(embed=build_gen_embed(name))
-                    await asyncio.sleep(1 + random.random())
-                except Exception as ex:
-                    print(f"[Dashboard Retry] {ex}")
-            except Exception as e:
-                print(f"[Dashboard Error] {e}")
+        # Refresh all dashboards periodically
+        for name in get_all_gen_list_names():
+            await refresh_dashboard(self.bot, name)
 
         # Expiry ping logic
         now = time.time()
         for list_name in get_all_gen_list_names():
             data = load_gen_list(list_name)
             ping_role = get_gen_list_role(list_name)
-            dash = get_gen_dashboard_id(list_name)
-            channel = (self.bot.get_channel(dash[0]) if isinstance(dash, (tuple, list))
-                       else self.bot.get_channel(dash.get("channel_id")) if dash else None)
-            if not channel:
-                continue
-
             for item in data:
                 if not item.get("expired"):
                     dur = (item["element"] * 64800 + item["shards"] * 648
@@ -116,15 +109,14 @@ class GeneratorCog(commands.Cog):
                     if now > item["timestamp"] + dur:
                         item["expired"] = True
                         mention = f"<@&{ping_role}>" if ping_role else ""
-                        try:
-                            await channel.send(f"⚡ Generator **{item['name']}** expired! {mention}")
-                            await asyncio.sleep(1 + random.random())
-                        except discord.errors.RateLimited as e:
-                            await asyncio.sleep(e.retry_after)
-                            await channel.send(f"⚡ Generator **{item['name']}** expired! {mention}")
-                            await asyncio.sleep(1 + random.random())
-                        except Exception as e:
-                            print(f"[Ping Error] {e}")
+                        channel_id, _ = get_gen_dashboard_id(list_name)
+                        channel = self.bot.get_channel(channel_id)
+                        if channel:
+                            try:
+                                await channel.send(f"⚡ Generator **{item['name']}** expired! {mention}")
+                            except discord.errors.RateLimited as e:
+                                await asyncio.sleep(e.retry_after)
+                                await channel.send(f"⚡ Generator **{item['name']}** expired! {mention}")
             save_gen_list(list_name, data)
 
     @app_commands.command(name="resync_gens", description="Force-refresh all generator dashboards (admin only)")
@@ -132,25 +124,8 @@ class GeneratorCog(commands.Cog):
         if not interaction.user.guild_permissions.administrator:
             return await interaction.response.send_message("❌ Admin only.", ephemeral=True)
         await interaction.response.defer(thinking=True)
-        for name, dash in get_all_gen_dashboards().items():
-            channel, message_id = (dash if isinstance(dash, (tuple, list))
-                                   else (self.bot.get_channel(dash.get("channel_id")), dash.get("message_id")))
-            if not channel or not message_id:
-                continue
-            try:
-                msg = await channel.fetch_message(message_id)
-                await msg.edit(embed=build_gen_embed(name))
-                await asyncio.sleep(1 + random.random())
-            except discord.errors.RateLimited as e:
-                await asyncio.sleep(e.retry_after)
-                try:
-                    msg = await channel.fetch_message(message_id)
-                    await msg.edit(embed=build_gen_embed(name))
-                    await asyncio.sleep(1 + random.random())
-                except Exception as ex:
-                    print(f"[Manual Retry] {ex}")
-            except Exception as e:
-                print(f"[Manual Force Sync Error] {e}")
+        for name in get_all_gen_list_names():
+            await refresh_dashboard(self.bot, name)
         await interaction.followup.send("✅ Force-refreshed all generator dashboards.", ephemeral=True)
 
     @app_commands.command(name="create_gen_list", description="Create a new generator list")
@@ -190,6 +165,22 @@ class GeneratorCog(commands.Cog):
             return await interaction.response.send_message(f"❌ Gen list '{list_name}' not found.", ephemeral=True)
         add_to_gen_list(list_name, entry_name, gen_type.value, element, shards, gas, imbued)
         await interaction.response.send_message(f"✅ Added '{entry_name}' to '{list_name}'.", ephemeral=True)
+        await refresh_dashboard(self.bot, list_name)
+
+    @app_commands.command(name="edit_gen", description="Edit a generator entry's name")
+    @app_commands.describe(list_name="Which generator list", old_name="Current entry name", new_name="New entry name")
+    async def edit_gen(self, interaction: discord.Interaction, list_name: str, old_name: str, new_name: str):
+        if not gen_list_exists(list_name):
+            return await interaction.response.send_message(f"❌ Gen list '{list_name}' not found.", ephemeral=True)
+        data = load_gen_list(list_name)
+        for item in data:
+            if item["name"].lower() == old_name.lower():
+                item["name"] = new_name
+                save_gen_list(list_name, data)
+                await interaction.response.send_message(f"✏️ Renamed '{old_name}' to '{new_name}'.", ephemeral=True)
+                await refresh_dashboard(self.bot, list_name)
+                return
+        await interaction.response.send_message(f"❌ Entry '{old_name}' not found.", ephemeral=True)
 
     @app_commands.command(name="remove_gen", description="Remove a generator entry")
     @app_commands.describe(list_name="Which generator list", name="Entry to remove")
@@ -200,6 +191,7 @@ class GeneratorCog(commands.Cog):
         new_data = [item for item in data if item["name"].lower() != name.lower()]
         save_gen_list(list_name, new_data)
         await interaction.response.send_message(f"🗑️ Removed '{name}' from '{list_name}'.", ephemeral=True)
+        await refresh_dashboard(self.bot, list_name)
 
     @app_commands.command(name="delete_gen_list", description="Delete an entire generator list")
     @app_commands.describe(name="Name of the list to delete")
@@ -216,6 +208,7 @@ class GeneratorCog(commands.Cog):
             return await interaction.response.send_message(f"❌ Gen list '{list_name}' not found.", ephemeral=True)
         set_gen_list_role(list_name, role.id)
         await interaction.response.send_message(f"✅ Ping role set for '{list_name}'.", ephemeral=True)
+        await refresh_dashboard(self.bot, list_name)
 
     @app_commands.command(name="list_gen_lists", description="List all generator lists")
     async def list_gen_lists(self, interaction: discord.Interaction):
