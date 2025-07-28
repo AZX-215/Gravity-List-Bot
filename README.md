@@ -4,114 +4,133 @@
 
 ---
 
-## 📋 Categorized Lists
-Create & manage lists with visual flair:
+## 📋 Categorized Lists  
+Create & manage lists with visual flair:  
 - 👑 Owner, 🔴 Enemy, 🟢 Friend, 🔵 Ally, 🟡 Beta, ⚫ Item  
 - **Headers & Notes:**  
-  - `/add_header list_name:<list> header:<text>`
-  - `/add_text list_name:<list> text:<note>`
+  - `/add_header list_name:<list> header:<text>`  
+  - `/remove_header list_name:<list> index:<#>`  
+  - `/add_text list_name:<list> text:<note>`  
+  - `/edit_text list_name:<list> index:<#> new_text:<text>`  
+  - `/remove_text list_name:<list> index:<#>`  
+- **Items & Ordering:**  
+  - `/add_name list_name:<list> category:<…> item_name:<name>`  
+  - `/remove_name list_name:<list> item_name:<name>`  
+  - `/edit_name list_name:<list> old_name:<name> new_name:<name>`  
+  - `/move_name list_name:<list> item_name:<name> position:<#>`  
+  - `/sort_list list_name:<list>`  
 
 ---
 
-## ⏳ Inline Timers in Lists  
-- Add timers with `/add_timer_to_list list_name:<list> name:<timer> hours:<int> minutes:<int>`
-- **Live countdowns:** Powered by Discord timestamps (`<t:TIMESTAMP:R>`)  
-- **No message spam**: Timers self-update; the bot only pings on expiry
+## 💬 Comments on List Items  
+Attach notes to specific items:  
+- `/add_comment list_name:<list> item_name:<name> comment:<text>`  
+- `/edit_comment list_name:<list> item_name:<name> new_comment:<text>`  
+- `/remove_comment list_name:<list> item_name:<name>`  
+
+---
+
+## 📄 Viewing Lists  
+- `/view_lists` — List all existing lists  
+- `/view_gen_lists` — List all existing generator lists  
+
+---
+
+## 🚀 Deploying Lists & Dashboards  
+- `/deploy_list name:<list>` — Deploy or update a regular list  
+- `/deploy_gen_list name:<gen_list>` — Deploy or update a generator dashboard  
 
 ---
 
 ## ⌛ Standalone Countdown Timers  
-- `/create_timer name:<timer> hours:<int> minutes:<int> [role:<@role>]`
-- `/pause_timer name:<timer>` / `/resume_timer name:<timer>` / `/delete_timer name:<timer>`
-- **Expiry pings:** Checked every minute (no per-second edits)
+- `/create_timer name:<timer> hours:<int> minutes:<int> [role:<@role>]`  
+- `/pause_timer name:<timer>`  
+- `/resume_timer name:<timer>`  
+- `/edit_timer name:<timer> hours:<int> minutes:<int>`  
+- `/delete_timer name:<timer>`  
+- **Expiry pings:** Checked every minute (no per-second edits)  
 
 ---
 
 ## ⚡ Generator Dashboards  
-- `/create_gen_list name:<list>`
-- `/add_gen tek list_name:<list> entry_name:<name> element:<int> shards:<int>`
-- `/add_gen electrical list_name:<list> entry_name:<name> gas:<int> imbued:<int>`
-- `/edit_gen`, `/remove_gen`, `/delete_gen_list`, `/set_gen_role`, `/list_gen_lists`
-- **Auto-refresh:** Every 5 minutes with **staggered updates** (rate-limit safe)
-- **Visually enhanced embeds:** Emojis, color, bold, clear sections
+- `/create_gen_list name:<list>`  
+- `/delete_gen_list name:<list>`  
+- `/add_gen tek list_name:<list> entry_name:<name> element:<int> shards:<int>`  
+- `/add_gen electrical list_name:<list> entry_name:<name> gas:<int> imbued:<int>`  
+- `/edit_gen list_name:<list> gen_name:<name> property:<…> new_value:<…>`  
+- `/remove_gen list_name:<list> gen_name:<name>`  
+- `/set_gen_role list_name:<list> role:<@role>`  
+
+Auto-refresh every 5 minutes with staggered updates for rate-limit safety.
 
 ---
 
 ## 🛡️ Logging & Debug
 
-### **A. Internal Bot Logging**
-- **Errors & warnings** are posted to a private channel of your choice (buffered & posted every minute).
-- **How to enable:**  
-  - Add to your `.env` (not tracked by git):
-    ```
-    LOG_CHANNEL_ID=your-discord-channel-id
-    ```
-  - Or set via `/set_log_channel` (admin only) in Discord.
+### A. Internal Bot Logging  
+- **Errors & warnings** are posted to a private channel of your choice (buffered & posted every minute).  
+- Enable via `.env`:  
+  ```env
+  LOG_CHANNEL_ID=your-discord-channel-id
+Or set at runtime: /set_log_channel #channel (admin only)
 
-### **B. Railway Service Logs (Optional)**
-- **Stream all container logs** (stdout/stderr, builds, crashes) to a Discord channel with a [Discord webhook](https://support.discord.com/hc/en-us/articles/228383668-Intro-to-Webhooks).
-  1. Create a webhook in your target Discord channel.
-  2. In Railway, add a **Custom Webhook** integration, paste your Discord webhook URL, and enable "Service Logs" and/or "Deployments".
-- Use both logging methods for complete visibility!
+B. Railway Service Logs (Optional)
+Stream all container logs (stdout/stderr, builds, crashes) to a Discord channel with a Discord webhook.
 
----
+Create a webhook in your target Discord channel.
 
-## 🔗 Deploying Any Dashboard  
-- `/lists name:<list>` posts or updates any **regular** list or generator dashboard.
+In Railway, add a Custom Webhook integration, paste your Discord webhook URL, and enable Service Logs and/or Deployments.
 
----
+Use both logging methods for complete visibility!
 
-## 🛠️ Local Setup
+🛠️ Local Setup
+Clone & enter directory:
 
-1. **Clone & enter directory:**
-   ```bash
-   git clone https://github.com/AZX-215/Gravity-List-Bot.git
-   cd Gravity-List-Bot
+bash
+Copy
+Edit
+git clone https://github.com/AZX-215/Gravity-List-Bot.git
+cd Gravity-List-Bot
+Configure environment:
 
-    Configure environment:
-
+bash
+Copy
+Edit
 cp .env.example .env
+Edit .env and fill in:
 
-    Edit .env and fill in:
-
-        DISCORD_TOKEN=your-bot-token
-
-        CLIENT_ID=your-client-id
-
-        LOG_CHANNEL_ID=optional-logs-channel-id
-
-        DATABASE_PATH=lists/data.json (or omit for default)
-
-    Never commit your .env! (It’s ignored by default for your safety.)
+ini
+Copy
+Edit
+DISCORD_TOKEN=your-bot-token
+CLIENT_ID=your-client-id
+GUILD_ID=optional_guild_id_for_channel-sync
+LOG_CHANNEL_ID=optional-logs-channel-id
+DATABASE_PATH=lists/data.json    # omit to use default
+Never commit your .env! It’s git-ignored by default.
 
 Install dependencies:
 
+bash
+Copy
+Edit
 pip install -r requirements.txt
-
 Run the bot:
 
-    python bot.py
-
+bash
+Copy
+Edit
+python bot.py
 🚀 Railway Deployment
 
-    Add your secrets as Railway Variables (from .env keys)
+Add your .env keys as Railway Environment Variables.
 
-    Set up Teardown Overlap for seamless deploys (10-30s overlap recommended)
+Use a Railswebhook for service logs/deployments as above.
 
-    (Optional) Set up a Railway logs webhook to a Discord channel
+Set “Teardown Overlap” to 10–30 s for seamless updates.
 
 🤝 Contributing
-
-    PRs & issues welcome!
-
-    MIT License
-
-Quick Tips
-
-    Slash commands auto-register in Discord when you start the bot
-
-    For questions, DM the maintainer or open a GitHub issue
-
-    Use .env.example for local dev; never share your real secrets
+PRs & issues welcome!
+MIT License
 
 Gravity List Bot is your Ark/Discord utility for smooth, stylish, organized PvP/PvE coordination. Enjoy!
