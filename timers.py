@@ -15,30 +15,46 @@ class TimerCog(commands.Cog):
 
     def build_timer_embed(self, data):
         embed = discord.Embed(title=f"Timer: {data['name']}")
+        # Paused state
         if data.get("paused", False):
             remaining = int(data.get("remaining_time", 0))
             hrs, rem = divmod(remaining, 3600)
             mins, sec = divmod(rem, 60)
-            desc = f"⏸️ Paused — {hrs:02d}h{mins:02d}m{sec:02d}s"
+            embed.description = f"⏸️ Paused — {hrs:02d}h{mins:02d}m{sec:02d}s"
             embed.color = 0xFFD700
+        # Expired state
         elif data.get("expired", False):
-            desc = "✅ Expired"
+            embed.description = "✅ Expired"
             embed.color = 0xFF0000
+        # Active state
         else:
             end_ts = int(data["end_time"])
-            desc = f"⏳ Ends <t:{end_ts}:R>"
+            embed.description = f"⏳ Ends <t:{end_ts}:R>"
             embed.color = 0x00FF00
 
-        embed.description = desc
+        # Footer ping role or owner
         if data.get("role_id"):
             embed.set_footer(text=f"Pings: <@&{data['role_id']}>")
         elif data.get("owner_id"):
             embed.set_footer(text=f"Pings: <@{data['owner_id']}>")
+
         return embed
 
     @app_commands.command(name="create_timer", description="Create a countdown timer")
-    @app_commands.describe(name="Timer name", hours="Hours", minutes="Minutes", role="Role to ping when timer expires")
-    async def create_timer(self, interaction: discord.Interaction, name: str, hours: int, minutes: int, role: discord.Role = None):
+    @app_commands.describe(
+        name="Timer name",
+        hours="Hours",
+        minutes="Minutes",
+        role="Role to ping when timer expires"
+    )
+    async def create_timer(
+        self,
+        interaction: discord.Interaction,
+        name: str,
+        hours: int,
+        minutes: int,
+        role: discord.Role = None
+    ):
         total = hours * 3600 + minutes * 60
         end_ts = time.time() + total
         tid = str(uuid.uuid4())
@@ -74,8 +90,12 @@ class TimerCog(commands.Cog):
                         await msg.edit(embed=self.build_timer_embed(data))
                     except:
                         pass
-                return await interaction.response.send_message(f"⏸️ Paused timer '{name}'", ephemeral=True)
-        await interaction.response.send_message(f"❌ No running timer named '{name}' found", ephemeral=True)
+                return await interaction.response.send_message(
+                    f"⏸️ Paused timer '{name}'", ephemeral=True
+                )
+        await interaction.response.send_message(
+            f"❌ No running timer named '{name}' found", ephemeral=True
+        )
 
     @app_commands.command(name="resume_timer", description="Resume a paused timer")
     @app_commands.describe(name="Name of timer to resume")
@@ -94,8 +114,48 @@ class TimerCog(commands.Cog):
                         await msg.edit(embed=self.build_timer_embed(data))
                     except:
                         pass
-                return await interaction.response.send_message(f"▶️ Resumed timer '{name}'", ephemeral=True)
-        await interaction.response.send_message(f"❌ No paused timer named '{name}' found", ephemeral=True)
+                return await interaction.response.send_message(
+                    f"▶️ Resumed timer '{name}'", ephemeral=True
+                )
+        await interaction.response.send_message(
+            f"❌ No paused timer named '{name}' found", ephemeral=True
+        )
+
+    @app_commands.command(name="edit_timer", description="Edit duration of an existing timer")
+    @app_commands.describe(
+        name="Name of timer to edit",
+        hours="New hours",
+        minutes="New minutes"
+    )
+    async def edit_timer(
+        self,
+        interaction: discord.Interaction,
+        name: str,
+        hours: int,
+        minutes: int
+    ):
+        timers = load_timers()
+        for tid, data in timers.items():
+            if data["name"].lower() == name.lower():
+                total = hours * 3600 + minutes * 60
+                if data.get("paused", False):
+                    data["remaining_time"] = total
+                else:
+                    data["end_time"] = time.time() + total
+                save_timers(timers)
+                channel = self.bot.get_channel(data["channel_id"])
+                if channel:
+                    try:
+                        msg = await channel.fetch_message(data["message_id"])
+                        await msg.edit(embed=self.build_timer_embed(data))
+                    except:
+                        pass
+                return await interaction.response.send_message(
+                    f"✏️ Updated timer '{name}' to {hours}h{minutes}m", ephemeral=True
+                )
+        await interaction.response.send_message(
+            f"❌ No timer named '{name}' found", ephemeral=True
+        )
 
     @app_commands.command(name="delete_timer", description="Delete a timer")
     @app_commands.describe(name="Name of timer to delete")
@@ -104,8 +164,12 @@ class TimerCog(commands.Cog):
         for tid, data in list(timers.items()):
             if data["name"].lower() == name.lower():
                 remove_timer(tid)
-                return await interaction.response.send_message(f"🗑️ Deleted timer '{name}'", ephemeral=True)
-        await interaction.response.send_message(f"❌ No timer named '{name}' found", ephemeral=True)
+                return await interaction.response.send_message(
+                    f"🗑️ Deleted timer '{name}'", ephemeral=True
+                )
+        await interaction.response.send_message(
+            f"❌ No timer named '{name}' found", ephemeral=True
+        )
 
     @tasks.loop(minutes=1)
     async def expiration_loop(self):
@@ -120,7 +184,11 @@ class TimerCog(commands.Cog):
                     data["expired"] = True
                     changed = True
                     channel = self.bot.get_channel(data["channel_id"])
-                    ping = f"<@&{data['role_id']}>" if data.get("role_id") else f"<@{data['owner_id']}>"
+                    ping = (
+                        f"<@&{data['role_id']}>"
+                        if data.get("role_id")
+                        else f"<@{data['owner_id']}>"
+                    )
                     if channel:
                         await channel.send(f"⏰ Timer **{data['name']}** expired! {ping}")
         if changed:
