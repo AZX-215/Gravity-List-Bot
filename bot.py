@@ -60,9 +60,11 @@ def build_embed(list_name: str) -> discord.Embed:
 
 @bot.event
 async def on_ready():
-    bot.add_cog(TimerCog(bot))
-    bot.add_cog(LoggingCog(bot))
+    await bot.add_cog(TimerCog(bot))
+    await bot.add_cog(LoggingCog(bot))
     await setup_gen_timers(bot)
+    
+# Sync commands
     if GUILD_ID:
         await bot.tree.sync(guild=discord.Object(id=GUILD_ID))
     else:
