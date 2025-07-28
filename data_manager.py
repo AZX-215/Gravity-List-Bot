@@ -15,6 +15,7 @@ def _ensure_dir(path):
     if base and not os.path.exists(base):
         os.makedirs(base, exist_ok=True)
 
+
 # ━━━ Standard Lists ━━━━━━━━━━━━━━━━━━━━
 
 def _get_list_path(list_name):
@@ -43,9 +44,26 @@ def list_exists(list_name):
     return os.path.exists(_get_list_path(list_name))
 
 def get_all_list_names():
+    """
+    Return only the JSON files that represent your lists,
+    skipping reserved files like data.json, dashboards.json, timers.json.
+    """
     _ensure_dir(DATABASE_PATH)
     base = os.path.dirname(DATABASE_PATH)
-    return sorted([f[:-5] for f in os.listdir(base) if f.endswith(".json")])
+    reserved = {
+        os.path.basename(DATABASE_PATH),
+        os.path.basename(DASHBOARDS_PATH),
+        os.path.basename(TIMERS_PATH),
+    }
+    names = []
+    for fname in os.listdir(base):
+        if not fname.endswith(".json"):
+            continue
+        if fname in reserved:
+            continue
+        names.append(fname[:-5])
+    return sorted(names)
+
 
 # ━━━ Dashboards ━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -73,6 +91,7 @@ def get_dashboard_id(list_name):
 
 def get_all_dashboards():
     return _load_dashboards()
+
 
 # ━━━ Generator Lists ━━━━━━━━━━━━━━━━━━
 
@@ -117,28 +136,21 @@ def add_to_gen_list(list_name, entry_name, gen_type, element, shards, gas, imbue
     })
     save_gen_list(list_name, data)
 
+
 # ━━━ Generator List Role Support ━━━━━━━━━━━━━━━━
 
 def set_gen_list_role(list_name, role_id):
-    """Save the role_id (for pings) in a metadata file for the generator list."""
     path = _get_gen_list_path(list_name)
-    if os.path.exists(path):
-        with open(path, "r") as f:
-            data = json.load(f)
-    else:
-        data = []
     meta_path = path + ".meta"
     meta = {"role_id": role_id}
     with open(meta_path, "w") as f:
         json.dump(meta, f)
 
 def get_gen_list_role(list_name):
-    """Return the role_id for this generator list, or None."""
     path = _get_gen_list_path(list_name) + ".meta"
     if os.path.exists(path):
         with open(path, "r") as f:
-            meta = json.load(f)
-            return meta.get("role_id")
+            return json.load(f).get("role_id")
     return None
 
 
@@ -169,6 +181,7 @@ def get_gen_dashboard_id(list_name):
 def get_all_gen_dashboards():
     return _load_gen_dashboards()
 
+
 # ━━━ Hash Helpers ━━━━━━━━━━━━━━━━━━━━━
 
 def get_list_hash(list_name):
@@ -177,10 +190,10 @@ def get_list_hash(list_name):
 def get_gen_list_hash(list_name):
     return hashlib.md5(json.dumps(load_gen_list(list_name), sort_keys=True).encode()).hexdigest()
 
+
 # ━━━ Timer Persistence ━━━━━━━━━━━━━━━━━━━━
 
 def load_timers():
-    """Load all timers from disk as a dict of {timer_id: data}."""
     _ensure_dir(TIMERS_PATH)
     if os.path.exists(TIMERS_PATH):
         with open(TIMERS_PATH, "r") as f:
@@ -188,19 +201,16 @@ def load_timers():
     return {}
 
 def save_timers(data):
-    """Save the entire timers dict to disk."""
     _ensure_dir(TIMERS_PATH)
     with open(TIMERS_PATH, "w") as f:
         json.dump(data, f, indent=2)
 
 def add_timer(timer_id, timer_data):
-    """Add or overwrite a single timer entry."""
     timers = load_timers()
     timers[timer_id] = timer_data
     save_timers(timers)
 
 def remove_timer(timer_id):
-    """Remove a timer by its ID."""
     timers = load_timers()
     if timer_id in timers:
         del timers[timer_id]
