@@ -21,40 +21,40 @@ from data_manager import (
 )
 
 # ─── Configuration ─────────────────────────────────────────────────────────────
-TEK_THUMBNAIL = "https://raw.githubusercontent.com/AZX-215/Gravity-List-Bot/main/images/Tek_Generator.png"
-TEK_COLOR     = 0x0099FF
-ELEC_COLOR    = 0xFFC300
-GEN_EMOJIS    = {"Tek": "⚡", "Electrical": "🔌"}
+TEK_THUMBNAIL   = "https://raw.githubusercontent.com/AZX-215/Gravity-List-Bot/main/images/Tek_Generator.png"
+TEK_COLOR       = 0x0099FF
+ELEC_COLOR      = 0xFFC300
+GEN_EMOJIS      = {"Tek": "⚡", "Electrical": "🔌"}
 
-BACKOFF_SECONDS = 10 * 60  # pause updates for 10 minutes on rate‑limit
+BACKOFF_SECONDS = 10 * 60   # pause updates for 10 minutes on 429
+LOW_THRESHOLD   = 12 * 3600 # 12 hours in seconds
 
-# ─── Utility: log to channel ────────────────────────────────────────────────────
+# ─── Utility: log to a configured channel ───────────────────────────────────────
 async def log_to_channel(bot: commands.Bot, message: str):
-    channel_id = os.getenv("LOG_CHANNEL_ID", None)
-    if not channel_id:
+    cid = os.getenv("LOG_CHANNEL_ID")
+    if not cid:
         return
-    ch = bot.get_channel(int(channel_id))
+    ch = bot.get_channel(int(cid))
     if ch:
         await ch.send(message)
 
-# ─── Refresh one dashboard ─────────────────────────────────────────────────────
+# ─── Utility: refresh one dashboard ────────────────────────────────────────────
 async def refresh_dashboard(bot: commands.Bot, list_name: str):
     dash = get_gen_dashboard_id(list_name)
     if not dash:
         return
-    channel_id, message_id = dash
-    ch = bot.get_channel(channel_id)
+    ch_id, msg_id = dash
+    ch = bot.get_channel(ch_id)
     if not ch:
         return
-    msg = await ch.fetch_message(message_id)
+    msg = await ch.fetch_message(msg_id)
     await msg.edit(embed=build_gen_embed(list_name))
 
-# ─── Build the embed ───────────────────────────────────────────────────────────
+# ─── Embed builder ────────────────────────────────────────────────────────────
 def build_gen_embed(list_name: str) -> discord.Embed:
     data = load_gen_list(list_name)
-    now = time.time()
+    now  = time.time()
 
-    # Title only shows the list name (centered by Discord)
     embed = discord.Embed(
         title=list_name,
         color=TEK_COLOR,
@@ -63,45 +63,52 @@ def build_gen_embed(list_name: str) -> discord.Embed:
     embed.set_thumbnail(url=TEK_THUMBNAIL)
     embed.set_footer(text="Gravity List Bot • Powered by AZX")
 
-    # Sort: Tek first, then Electrical; then alphabetical
     def sort_key(item):
-        return (0 if item["type"] == "Tek" else 1, item["name"].lower())
+        return (0 if item["type"]=="Tek" else 1, item["name"].lower())
 
     for item in sorted(data, key=sort_key):
         name     = item["name"]
         gen_type = item["type"]
         start    = item["timestamp"]
 
-        # Calculate total lifetime
+        # total runtime in seconds
         if gen_type == "Tek":
-            total_sec = item.get("shards", 0) * 648 + item.get("element", 0) * 64800
+            total_sec = item.get("shards",0)*648 + item.get("element",0)*64800
         else:
-            total_sec = item.get("gas", 0) * 3600 + item.get("imbued", 0) * 14400
+            total_sec = item.get("gas",0)*3600 + item.get("imbued",0)*14400
 
         end_ts  = start + total_sec
         rem_sec = max(0, end_ts - now)
 
-        # Break into days, hours, minutes
-        days, rem = divmod(int(rem_sec), 86400)
-        hours, rem = divmod(rem, 3600)
+        # breakdown
+        days, rem   = divmod(int(rem_sec), 86400)
+        hours, rem  = divmod(rem, 3600)
         minutes     = rem // 60
 
-        # Determine status
-        expired = item.get("expired", False) or rem_sec <= 0
+        # expired check
+        expired = item.get("expired", False) or rem_sec<=0
+
+        # low‐fuel check (12 h or zero resource)
+        if gen_type=="Tek":
+            out_of_elem = item.get("element",0)==0
+        else:
+            out_of_gas  = item.get("gas",0)==0
+
+        low = (not expired) and (
+            rem_sec <= LOW_THRESHOLD or
+            (gen_type=="Tek" and out_of_elem) or
+            (gen_type!="Tek" and out_of_gas)
+        )
+
+        # status emoji/text
         if expired:
             status_emoji, status_text = "❌", "Offline"
+        elif low:
+            status_emoji, status_text = "⚠️", "Low Fuel"
         else:
-            # Low‑fuel thresholds
-            if gen_type == "Tek":
-                low = (days == 0 and hours < 1) or item.get("element", 0) == 0
-            else:
-                low = (days == 0 and hours < 1) or item.get("gas", 0) == 0
-            if low:
-                status_emoji, status_text = "⚠️", "Low Fuel"
-            else:
-                status_emoji, status_text = "🟢", "Online"
+            status_emoji, status_text = "🟢", "Online"
 
-        # Field lines: one line with remaining + status
+        # field
         emoji   = GEN_EMOJIS.get(gen_type, "")
         rem_str = f"{days}d {hours}h {minutes}m"
         field_name  = f"{emoji} {name}"
@@ -109,7 +116,6 @@ def build_gen_embed(list_name: str) -> discord.Embed:
 
         embed.add_field(name=field_name, value=field_value, inline=False)
 
-    # If the list is empty
     if not data:
         embed.description = "No generators in this list."
 
@@ -150,29 +156,46 @@ class GeneratorCog(commands.Cog):
                 await log_to_channel(self.bot, f"[GenRefresh] {name}: {e}")
             await asyncio.sleep(1)
 
-        # 2) Check expirations & ping
+        # 2) Check expirations & low‐fuel pings
         changed = False
         for name in get_all_gen_list_names():
-            data = load_gen_list(name)
+            data    = load_gen_list(name)
             role_id = get_gen_list_role(name)
             for item in data:
-                if item.get("expired"):
-                    continue
-                # total again
+                start    = item["timestamp"]
+                gen_type = item["type"]
+                # total as before
                 total = (
-                    item.get("shards",0) * 648 + item.get("element",0) * 64800
-                    if item["type"] == "Tek"
-                    else item.get("gas",0) * 3600 + item.get("imbued",0) * 14400
+                    item.get("shards",0)*648 + item.get("element",0)*64800
+                    if gen_type=="Tek"
+                    else item.get("gas",0)*3600 + item.get("imbued",0)*14400
                 )
-                if now >= item["timestamp"] + total:
+                elapsed = now - start
+
+                # expired ping
+                if not item.get("expired", False) and elapsed >= total:
                     item["expired"] = True
                     changed = True
                     dash = get_gen_dashboard_id(name)
-                    if dash:
+                    if dash and role_id:
                         ch = self.bot.get_channel(dash[0])
-                        ping = f"<@&{role_id}>" if role_id else ""
                         if ch:
-                            await ch.send(f"⏰ **{item['name']}** expired! {ping}")
+                            await ch.send(f"⏰ **{item['name']}** expired! <@&{role_id}>")
+
+                # low‐fuel ping
+                low_notified = item.get("low_notified", False)
+                rem_sec      = max(0, total - elapsed)
+                out_of_res   = (gen_type=="Tek" and item.get("element",0)==0) or (
+                               gen_type!="Tek" and item.get("gas",0)==0)
+                low_now      = rem_sec <= LOW_THRESHOLD or out_of_res
+                if low_now and not low_notified:
+                    item["low_notified"] = True
+                    changed = True
+                    dash = get_gen_dashboard_id(name)
+                    if dash and role_id:
+                        ch = self.bot.get_channel(dash[0])
+                        if ch:
+                            await ch.send(f"⚠️ **{item['name']}** low fuel! <@&{role_id}>")
 
         if changed:
             for name in get_all_gen_list_names():
@@ -254,11 +277,11 @@ class GeneratorCog(commands.Cog):
         data = load_gen_list(list_name)
         for item in data:
             if item["name"] == gen_name:
-                if new_name:         item["name"]    = new_name
-                if element is not None: item["element"] = element
-                if shards  is not None: item["shards"]  = shards
-                if gas     is not None: item["gas"]     = gas
-                if imbued  is not None: item["imbued"]  = imbued
+                if new_name:            item["name"]    = new_name
+                if element   is not None: item["element"] = element
+                if shards    is not None: item["shards"]  = shards
+                if gas       is not None: item["gas"]     = gas
+                if imbued    is not None: item["imbued"]  = imbued
                 save_gen_list(list_name, data)
                 return await interaction.response.send_message(f"✅ Updated `{gen_name}`.", ephemeral=True)
         await interaction.response.send_message(f"❌ `{gen_name}` not in `{list_name}`.", ephemeral=True)
@@ -276,14 +299,13 @@ class GeneratorCog(commands.Cog):
                 return await interaction.response.send_message(f"✅ Removed `{gen_name}`.", ephemeral=True)
         await interaction.response.send_message(f"❌ `{gen_name}` not in `{list_name}`.", ephemeral=True)
 
-    @app_commands.command(name="set_gen_role", description="Set a ping role for expirations")
+    @app_commands.command(name="set_gen_role", description="Set a ping role for expirations/low-fuel")
     @app_commands.describe(list_name="List name", role="Role to ping")
     async def set_gen_role(self, interaction: discord.Interaction, list_name: str, role: discord.Role):
         if not gen_list_exists(list_name):
             return await interaction.response.send_message(f"❌ `{list_name}` not found.", ephemeral=True)
         set_gen_list_role(list_name, role.id)
         await interaction.response.send_message(f"✅ Ping role set for `{list_name}`.", ephemeral=True)
-
 
 # ─── Setup for bot.py ───────────────────────────────────────────────────────────
 async def setup_gen_timers(bot: commands.Bot):
