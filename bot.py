@@ -359,14 +359,14 @@ async def edit_comment(interaction: discord.Interaction, list_name: str, item_na
     list_name="List to modify",
     item_name="Item whose comment to remove"
 )
-async def remove_comment(interaction: discord.Interation, list_name: str, item_name: str):
+async def remove_comment(interaction: discord.Interaction, list_name: str, item_name: str):
     if not list_exists(list_name):
         return await interaction.response.send_message(
             f"❌ No list named '{list_name}'.", ephemeral=True
         )
     data = load_list(list_name)
     for it in data:
-        if it.get("name") == item_name and "comment" in it:
+        if it.get("name") == item_NAME and "comment" in it:
             del it["comment"]
             save_list(list_name, data)
             return await interaction.response.send_message(
