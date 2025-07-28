@@ -37,7 +37,7 @@ async def log_to_channel(bot: commands.Bot, message: str):
     if ch:
         await ch.send(message)
 
-# ─── Utility: refresh a single dashboard message ────────────────────────────────
+# ─── Refresh one dashboard ─────────────────────────────────────────────────────
 async def refresh_dashboard(bot: commands.Bot, list_name: str):
     dash = get_gen_dashboard_id(list_name)
     if not dash:
@@ -49,12 +49,12 @@ async def refresh_dashboard(bot: commands.Bot, list_name: str):
     msg = await ch.fetch_message(message_id)
     await msg.edit(embed=build_gen_embed(list_name))
 
-# ─── Embed builder ────────────────────────────────────────────────────────────
+# ─── Build the embed ───────────────────────────────────────────────────────────
 def build_gen_embed(list_name: str) -> discord.Embed:
     data = load_gen_list(list_name)
     now = time.time()
 
-    # Title is just the list name
+    # Title only shows the list name (centered by Discord)
     embed = discord.Embed(
         title=list_name,
         color=TEK_COLOR,
@@ -68,51 +68,54 @@ def build_gen_embed(list_name: str) -> discord.Embed:
         return (0 if item["type"] == "Tek" else 1, item["name"].lower())
 
     for item in sorted(data, key=sort_key):
-        name = item["name"]
+        name     = item["name"]
         gen_type = item["type"]
-        start = item["timestamp"]
+        start    = item["timestamp"]
 
-        # Determine total duration and prefix emoji
+        # Calculate total lifetime
         if gen_type == "Tek":
             total_sec = item.get("shards", 0) * 648 + item.get("element", 0) * 64800
-            color = TEK_COLOR
         else:
             total_sec = item.get("gas", 0) * 3600 + item.get("imbued", 0) * 14400
-            color = ELEC_COLOR
 
-        end_ts = int(start + total_sec)
+        end_ts  = start + total_sec
         rem_sec = max(0, end_ts - now)
-        hrs, rem = divmod(rem_sec, 3600)
-        mins, _ = divmod(rem, 60)
 
-        # Status logic
-        expired = item.get("expired", False)
-        if expired or rem_sec <= 0:
-            status = ("❌", "Offline")
-        elif gen_type == "Tek":
-            # low if < 30 min or ≤0 shards/element thresholds
-            status = ("⚠️", "Low Fuel") if (mins < 30 or item.get("element",0)==0) else ("🔋", "Online")
+        # Break into days, hours, minutes
+        days, rem = divmod(int(rem_sec), 86400)
+        hours, rem = divmod(rem, 3600)
+        minutes     = rem // 60
+
+        # Determine status
+        expired = item.get("expired", False) or rem_sec <= 0
+        if expired:
+            status_emoji, status_text = "❌", "Offline"
         else:
-            # low if < 1 h gas or < 1 block imbued
-            status = ("⚠️", "Low Fuel") if (hrs < 1 or item.get("gas",0)==0) else ("🔋", "Online")
+            # Low‑fuel thresholds
+            if gen_type == "Tek":
+                low = (days == 0 and hours < 1) or item.get("element", 0) == 0
+            else:
+                low = (days == 0 and hours < 1) or item.get("gas", 0) == 0
+            if low:
+                status_emoji, status_text = "⚠️", "Low Fuel"
+            else:
+                status_emoji, status_text = "🟢", "Online"
 
-        # Build field
-        emoji = GEN_EMOJIS.get(gen_type, "")
-        rem_str = f"{int(hrs)}h {int(mins)}m"
-        field_name = f"{emoji} {name}"
-        field_value = (
-            f"⏳ {rem_str} left — {status[0]} {status[1]}\n"
-            f"<t:{end_ts}:R>"
-        )
+        # Field lines: one line with remaining + status
+        emoji   = GEN_EMOJIS.get(gen_type, "")
+        rem_str = f"{days}d {hours}h {minutes}m"
+        field_name  = f"{emoji} {name}"
+        field_value = f"⏳ {rem_str} remaining — {status_emoji} {status_text}"
+
         embed.add_field(name=field_name, value=field_value, inline=False)
 
-    # If empty:
+    # If the list is empty
     if not data:
         embed.description = "No generators in this list."
 
     return embed
 
-# ─── Generator Cog ─────────────────────────────────────────────────────────────
+# ─── Cog Definition ─────────────────────────────────────────────────────────────
 class GeneratorCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
@@ -145,9 +148,9 @@ class GeneratorCog(commands.Cog):
                     await log_to_channel(self.bot, f"[GenRefresh] {name}: {e}")
             except Exception as e:
                 await log_to_channel(self.bot, f"[GenRefresh] {name}: {e}")
-            await asyncio.sleep(1)  # stagger
+            await asyncio.sleep(1)
 
-        # 2) Expiry checks & pings
+        # 2) Check expirations & ping
         changed = False
         for name in get_all_gen_list_names():
             data = load_gen_list(name)
@@ -155,11 +158,12 @@ class GeneratorCog(commands.Cog):
             for item in data:
                 if item.get("expired"):
                     continue
-                # compute total again
-                if item["type"] == "Tek":
-                    total = item.get("shards",0)*648 + item.get("element",0)*64800
-                else:
-                    total = item.get("gas",0)*3600 + item.get("imbued",0)*14400
+                # total again
+                total = (
+                    item.get("shards",0) * 648 + item.get("element",0) * 64800
+                    if item["type"] == "Tek"
+                    else item.get("gas",0) * 3600 + item.get("imbued",0) * 14400
+                )
                 if now >= item["timestamp"] + total:
                     item["expired"] = True
                     changed = True
@@ -171,7 +175,6 @@ class GeneratorCog(commands.Cog):
                             await ch.send(f"⏰ **{item['name']}** expired! {ping}")
 
         if changed:
-            # persist updates
             for name in get_all_gen_list_names():
                 save_gen_list(name, load_gen_list(name))
 
@@ -251,11 +254,11 @@ class GeneratorCog(commands.Cog):
         data = load_gen_list(list_name)
         for item in data:
             if item["name"] == gen_name:
-                if new_name:   item["name"]    = new_name
+                if new_name:         item["name"]    = new_name
                 if element is not None: item["element"] = element
-                if shards is not None:  item["shards"]  = shards
-                if gas is not None:     item["gas"]     = gas
-                if imbued is not None:  item["imbued"]  = imbued
+                if shards  is not None: item["shards"]  = shards
+                if gas     is not None: item["gas"]     = gas
+                if imbued  is not None: item["imbued"]  = imbued
                 save_gen_list(list_name, data)
                 return await interaction.response.send_message(f"✅ Updated `{gen_name}`.", ephemeral=True)
         await interaction.response.send_message(f"❌ `{gen_name}` not in `{list_name}`.", ephemeral=True)
@@ -289,5 +292,5 @@ async def setup_gen_timers(bot: commands.Bot):
     except CommandAlreadyRegistered:
         pass
 
-# Alias for bot.py import
+# ─── Alias for bot.py import ──────────────────────────────────────────────────
 build_gen_timetable_embed = build_gen_embed
