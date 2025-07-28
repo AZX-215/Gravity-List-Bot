@@ -50,7 +50,7 @@ async def refresh_dashboard(bot: commands.Bot, list_name: str):
     msg = await ch.fetch_message(msg_id)
     await msg.edit(embed=build_gen_embed(list_name))
 
-# ─── Embed builder ────────────────────────────────────────────────────────────
+# ─── Build the embed ───────────────────────────────────────────────────────────
 def build_gen_embed(list_name: str) -> discord.Embed:
     data = load_gen_list(list_name)
     now  = time.time()
@@ -90,15 +90,11 @@ def build_gen_embed(list_name: str) -> discord.Embed:
 
         # low‐fuel check (12 h or zero resource)
         if gen_type=="Tek":
-            out_of_elem = item.get("element",0)==0
+            out_of_res = item.get("element",0)==0
         else:
-            out_of_gas  = item.get("gas",0)==0
+            out_of_res = item.get("gas",0)==0
 
-        low = (not expired) and (
-            rem_sec <= LOW_THRESHOLD or
-            (gen_type=="Tek" and out_of_elem) or
-            (gen_type!="Tek" and out_of_gas)
-        )
+        low = (not expired) and (rem_sec <= LOW_THRESHOLD or out_of_res)
 
         # status emoji/text
         if expired:
@@ -108,11 +104,13 @@ def build_gen_embed(list_name: str) -> discord.Embed:
         else:
             status_emoji, status_text = "🟢", "Online"
 
-        # field
+        # **Here’s the formatting tweak**:
+        #  - underline the name
+        #  - three spaces after emoji, and around the dash
         emoji   = GEN_EMOJIS.get(gen_type, "")
         rem_str = f"{days}d {hours}h {minutes}m"
-        field_name  = f"{emoji} {name}"
-        field_value = f"⏳ {rem_str} remaining — {status_emoji} {status_text}"
+        field_name  = f"{emoji}   __{name}__"
+        field_value = f"⏳   {rem_str} remaining   —   {status_emoji} {status_text}"
 
         embed.add_field(name=field_name, value=field_value, inline=False)
 
@@ -164,7 +162,6 @@ class GeneratorCog(commands.Cog):
             for item in data:
                 start    = item["timestamp"]
                 gen_type = item["type"]
-                # total as before
                 total = (
                     item.get("shards",0)*648 + item.get("element",0)*64800
                     if gen_type=="Tek"
@@ -182,7 +179,7 @@ class GeneratorCog(commands.Cog):
                         if ch:
                             await ch.send(f"⏰ **{item['name']}** expired! <@&{role_id}>")
 
-                # low‐fuel ping
+                # low‐fuel ping (once)
                 low_notified = item.get("low_notified", False)
                 rem_sec      = max(0, total - elapsed)
                 out_of_res   = (gen_type=="Tek" and item.get("element",0)==0) or (
