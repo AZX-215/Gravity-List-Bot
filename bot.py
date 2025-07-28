@@ -39,10 +39,13 @@ async def update_list_dashboard(list_name: str):
         return
     try:
         msg = await channel.fetch_message(message_id)
-        from bot import build_embed  # avoid circular import if needed
         embed = build_embed(list_name)
         await msg.edit(embed=embed)
+    except discord.HTTPException:
+        # rate‑limit or missing perms: just skip
+        pass
     except Exception:
+        # anything else: swallow so we don't crash
         pass
 
 
@@ -387,7 +390,7 @@ async def help_cmd(interaction: discord.Interaction):
         "• CRUD `/create_list`, `/delete_list`, `/add_header`, `/remove_header`, `/add_text`, `/edit_text`, `/remove_text`\n"
         "  `/add_name`, `/remove_name`, `/edit_name`, `/move_name`, `/sort_list`\n"
         "• Comments `/add_comment`, `/edit_comment`, `/remove_comment`\n"
-        "• Timers & Gen dashboards commands…\n"
+        "• Timers & Gen dashboards commands\n"
         "Full details in README.md."
     )
     await interaction.response.send_message(text, ephemeral=True)
