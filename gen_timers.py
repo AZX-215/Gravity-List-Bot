@@ -288,3 +288,6 @@ async def setup_gen_timers(bot: commands.Bot):
         await bot.add_cog(GeneratorCog(bot))
     except CommandAlreadyRegistered:
         pass
+
+# Alias for bot.py import
+build_gen_timetable_embed = build_gen_embed
