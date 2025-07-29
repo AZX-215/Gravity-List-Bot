@@ -4,133 +4,145 @@
 
 ---
 
-## 📋 Categorized Lists  
-Create & manage lists with visual flair:  
-- 👑 Owner, 🔴 Enemy, 🟢 Friend, 🔵 Ally, 🟡 Beta, ⚫ Item  
-- **Headers & Notes:**  
-  - `/add_header list_name:<list> header:<text>`  
-  - `/remove_header list_name:<list> index:<#>`  
-  - `/add_text list_name:<list> text:<note>`  
-  - `/edit_text list_name:<list> index:<#> new_text:<text>`  
-  - `/remove_text list_name:<list> index:<#>`  
-- **Items & Ordering:**  
-  - `/add_name list_name:<list> category:<…> item_name:<name>`  
-  - `/remove_name list_name:<list> item_name:<name>`  
-  - `/edit_name list_name:<list> old_name:<name> new_name:<name>`  
-  - `/move_name list_name:<list> item_name:<name> position:<#>`  
-  - `/sort_list list_name:<list>`  
+## 📋 Categorized Lists
+Create & manage lists with visual flair:
+- 👑 Owner, 🔴 Enemy, 🟢 Friend, 🔵 Ally, 🟡 Beta, ⚫ Item
+
+- **Categories:**
+  - `/add_list_category list_name:<list> title:<text>`
+  - `/edit_list_category list_name:<list> index:<#> new_title:<text>`
+  - `/remove_list_category list_name:<list> index:<#>`
+  - `/assign_to_category list_name:<list> category_index:<#> entry_type:<Text|Bullet|Name> entry_index:<#>`
+
+- **Plain Text Notes:**
+  - `/add_text list_name:<list> text:<note>`
+  - `/edit_text list_name:<list> index:<#> new_text:<text>`
+  - `/remove_text list_name:<list> index:<#>`
+
+- **Bullets:**
+  - `/add_bullet list_name:<list> bullet:<text>`
+  - `/edit_bullet list_name:<list> index:<#> new_bullet:<text>`
+  - `/remove_bullet list_name:<list> index:<#>`
+
+- **Items & Ordering:**
+  - `/add_name list_name:<list> category:<Owner|Friend|Ally|Beta|Enemy|Item> item_name:<name>`
+  - `/remove_name list_name:<list> item_name:<name>`
+  - `/edit_name list_name:<list> old_name:<name> new_name:<name> category:<…>`
+  - `/move_name list_name:<list> item_name:<name> position:<#>`
+  - `/sort_list list_name:<list>`
 
 ---
 
-## 💬 Comments on List Items  
-Attach notes to specific items:  
-- `/add_comment list_name:<list> item_name:<name> comment:<text>`  
-- `/edit_comment list_name:<list> item_name:<name> new_comment:<text>`  
-- `/remove_comment list_name:<list> item_name:<name>`  
+## 💬 Comments on List Items
+Attach notes to specific items:
+- `/add_comment list_name:<list> item_name:<name> comment:<text>`
+- `/edit_comment list_name:<list> item_name:<name> new_comment:<text>`
+- `/remove_comment list_name:<list> item_name:<name>`
 
 ---
 
-## 📄 Viewing Lists  
-- `/view_lists` — List all existing lists  
-- `/view_gen_lists` — List all existing generator lists  
+## 📄 Viewing Lists
+- `/view_lists` — List all existing lists
+- `/view_gen_lists` — List all existing generator lists
 
 ---
 
-## 🚀 Deploying Lists & Dashboards  
-- `/deploy_list name:<list>` — Deploy or update a regular list  
-- `/deploy_gen_list name:<gen_list>` — Deploy or update a generator dashboard  
+## 🚀 Deploying Lists & Dashboards
+- `/deploy_list name:<list>` — Deploy or update a regular list
+- `/deploy_gen_list name:<gen_list>` — Deploy or update a generator dashboard
 
 ---
 
-## ⌛ Standalone Countdown Timers  
-- `/create_timer name:<timer> hours:<int> minutes:<int> [role:<@role>]`  
-- `/pause_timer name:<timer>`  
-- `/resume_timer name:<timer>`  
-- `/edit_timer name:<timer> hours:<int> minutes:<int>`  
-- `/delete_timer name:<timer>`  
-- **Expiry pings:** Checked every minute (no per-second edits)  
+## ⌛ Standalone Countdown Timers
+- `/create_timer name:<timer> hours:<int> minutes:<int>`
+- `/pause_timer name:<timer>`
+- `/resume_timer name:<timer>`
+- `/edit_timer name:<timer> hours:<int> minutes:<int>`
+- `/delete_timer name:<timer>`
+- **Expiry pings:** Checked every minute (no per-second edits)
 
 ---
 
-## ⚡ Generator Dashboards  
-- `/create_gen_list name:<list>`  
-- `/delete_gen_list name:<list>`  
-- `/add_gen tek list_name:<list> entry_name:<name> element:<int> shards:<int>`  
-- `/add_gen electrical list_name:<list> entry_name:<name> gas:<int> imbued:<int>`  
-- `/edit_gen list_name:<list> gen_name:<name> property:<…> new_value:<…>`  
-- `/remove_gen list_name:<list> gen_name:<name>`  
-- `/set_gen_role list_name:<list> role:<@role>`  
+## ⚡ Generator Dashboards
+- `/create_gen_list name:<list>`
+- `/delete_gen_list name:<list>`
 
-Auto-refresh every 5 minutes with staggered updates for rate-limit safety.
+- **Tek Generators:**
+  - `/add_gen_tek list_name:<list> gen_name:<name> element:<int> shards:<int>`
+  - `/edit_gen_tek list_name:<list> gen_name:<name> element:<int> shards:<int>`
+
+- **Electrical Generators:**
+  - `/add_gen_electrical list_name:<list> gen_name:<name> gas:<int> imbued:<int>`
+  - `/edit_gen_electrical list_name:<list> gen_name:<name> gas:<int> imbued:<int>`
+
+- **Common Actions:**
+  - `/remove_gen list_name:<list> gen_name:<name>`
+  - `/reorder_gen list_name:<list> from_index:<#> to_index:<#>`
+  - `/set_gen_role list_name:<list> role:<@role>`
+
+Auto-refresh every **90 seconds** (with 1 s staggers) and 10 min rate-limit back-off.
 
 ---
 
 ## 🛡️ Logging & Debug
 
-### A. Internal Bot Logging  
-- **Errors & warnings** are posted to a private channel of your choice (buffered & posted every minute).  
-- Enable via `.env`:  
+### Internal Bot Logging
+- **Errors & warnings** are posted to a private channel of your choice (buffered & posted every 10 s).
+- Enable via `.env`:
   ```env
   LOG_CHANNEL_ID=your-discord-channel-id
-Or set at runtime: /set_log_channel #channel (admin only)
+  ```
 
-B. Railway Service Logs (Optional)
-Stream all container logs (stdout/stderr, builds, crashes) to a Discord channel with a Discord webhook.
+Or at runtime:
+```
+/set_log_channel #channel (admin only)
+```
 
-Create a webhook in your target Discord channel.
+---
 
-In Railway, add a Custom Webhook integration, paste your Discord webhook URL, and enable Service Logs and/or Deployments.
-
-Use both logging methods for complete visibility!
-
-🛠️ Local Setup
+## 🛠️ Local Setup
 Clone & enter directory:
 
-bash
-Copy
-Edit
+```bash
 git clone https://github.com/AZX-215/Gravity-List-Bot.git
 cd Gravity-List-Bot
+```
+
 Configure environment:
 
-bash
-Copy
-Edit
+```bash
 cp .env.example .env
-Edit .env and fill in:
-
-ini
-Copy
-Edit
+# Edit .env with your values:
 DISCORD_TOKEN=your-bot-token
 CLIENT_ID=your-client-id
 GUILD_ID=optional_guild_id_for_channel-sync
 LOG_CHANNEL_ID=optional-logs-channel-id
-DATABASE_PATH=lists/data.json    # omit to use default
-Never commit your .env! It’s git-ignored by default.
+DATABASE_PATH=lists/data.json # omit for default
+```
 
 Install dependencies:
 
-bash
-Copy
-Edit
+```bash
 pip install -r requirements.txt
+```
+
 Run the bot:
 
-bash
-Copy
-Edit
+```bash
 python bot.py
-🚀 Railway Deployment
+```
 
-Add your .env keys as Railway Environment Variables.
+---
 
-Use a Railswebhook for service logs/deployments as above.
+## 🚀 Deployment on Railway
+Add your `.env` keys as Railway Environment Variables.
+Use a webhook for service logs/deployments if desired.
+Set “Teardown Overlap” to 10–30 s for seamless restarts.
 
-Set “Teardown Overlap” to 10–30 s for seamless updates.
+---
 
-🤝 Contributing
+## 🤝 Contributing
 PRs & issues welcome!
-MIT License
+**MIT License**
 
 Gravity List Bot is your Ark/Discord utility for smooth, stylish, organized PvP/PvE coordination. Enjoy!
