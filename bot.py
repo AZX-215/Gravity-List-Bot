@@ -79,7 +79,6 @@ async def on_ready():
     print(f"Logged in as {bot.user} (ID: {bot.user.id})")
 
 # ━━━ List CRUD ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
 @bot.tree.command(name="create_list", description="Create a new list")
 @app_commands.describe(name="Name of the new list")
 async def create_list_cmd(interaction: discord.Interaction, name: str):
@@ -97,7 +96,6 @@ async def delete_list_cmd(interaction: discord.Interaction, name: str):
     await interaction.response.send_message(f"✅ Deleted list '{name}'.", ephemeral=True)
 
 # ━━━ Category entries ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
 @bot.tree.command(name="add_list_category", description="Add a category header to a list")
 @app_commands.describe(list_name="List to modify", title="Category title")
 async def add_list_category(interaction: discord.Interaction, list_name: str, title: str):
@@ -138,7 +136,6 @@ async def remove_list_category(interaction: discord.Interaction, list_name: str,
     await update_list_dashboard(list_name)
 
 # ━━━ Plain text entries ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
 @bot.tree.command(name="add_text", description="Add a plain text line to a list")
 @app_commands.describe(list_name="List to modify", text="Text line to add")
 async def add_text(interaction: discord.Interaction, list_name: str, text: str):
@@ -179,7 +176,6 @@ async def remove_text(interaction: discord.Interaction, list_name: str, index: i
     await update_list_dashboard(list_name)
 
 # ━━━ Bullet entries ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
 @bot.tree.command(name="add_bullet", description="Add a bullet entry to a list")
 @app_commands.describe(list_name="List to modify", bullet="Bullet point to add")
 async def add_bullet(interaction: discord.Interaction, list_name: str, bullet: str):
@@ -220,7 +216,6 @@ async def remove_bullet(interaction: discord.Interaction, list_name: str, index:
     await update_list_dashboard(list_name)
 
 # ━━━ Entries CRUD with dropdowns ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
 @bot.tree.command(name="add_name", description="Add an entry with category")
 @app_commands.describe(
     list_name="List to modify",
@@ -239,7 +234,6 @@ async def add_name(interaction: discord.Interaction, list_name: str, entry_name:
     if not list_exists(list_name):
         return await interaction.response.send_message(f"❌ No list named '{list_name}'.", ephemeral=True)
     data = load_list(list_name)
-    # Reject duplicate names
     if any(e['name'].lower() == entry_name.lower() and e['category'] not in ('Category','Text','Bullet') for e in data):
         return await interaction.response.send_message(f"❌ `{entry_name}` already exists in `{list_name}`.", ephemeral=True)
     data.append({"category":category.value,"name":entry_name})
@@ -383,6 +377,54 @@ async def remove_comment(interaction: discord.Interaction, list_name: str, entry
             return
     await interaction.response.send_message(f"❌ Entry '{entry_name}' not found.", ephemeral=True)
 
+# ━━━ Assign to Category ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+@bot.tree.command(name="assign_to_category", description="Move an entry under a specific category")
+@app_commands.describe(
+    list_name="List to modify",
+    category_index="Category position (1-based)",
+    entry_type="Type of entry (Text, Bullet, Name)",
+    entry_index="Entry position within that type (1-based)"
+)
+@app_commands.choices(entry_type=[
+    app_commands.Choice(name="Text", value="Text"),
+    app_commands.Choice(name="Bullet", value="Bullet"),
+    app_commands.Choice(name="Name", value="Name"),
+])
+async def assign_to_category(
+    interaction: discord.Interaction,
+    list_name: str,
+    category_index: int,
+    entry_type: app_commands.Choice[str],
+    entry_index: int
+):
+    if not list_exists(list_name):
+        return await interaction.response.send_message(f"❌ No list named '{list_name}'.", ephemeral=True)
+    data = load_list(list_name)
+    cat_idxs = [i for i,v in enumerate(data) if v["category"]=="Category"]
+    if not cat_idxs:
+        return await interaction.response.send_message("❌ No categories in this list.", ephemeral=True)
+    if category_index < 1 or category_index > len(cat_idxs):
+        return await interaction.response.send_message("❌ Invalid category index.", ephemeral=True)
+    et = entry_type.value
+    if et == "Text":
+        pos_list = [i for i,v in enumerate(data) if v["category"]=="Text"]
+    elif et == "Bullet":
+        pos_list = [i for i,v in enumerate(data) if v["category"]=="Bullet"]
+    else:  # Name
+        pos_list = [i for i,v in enumerate(data) if v["category"] not in ("Category","Text","Bullet")]
+    if entry_index < 1 or entry_index > len(pos_list):
+        return await interaction.response.send_message(f"❌ Invalid {et} index.", ephemeral=True)
+    entry = data.pop(pos_list[entry_index-1])
+    # recompute category positions after removal
+    new_cat_idxs = [i for i,v in enumerate(data) if v["category"]=="Category"]
+    insert_at = new_cat_idxs[category_index-1] + 1
+    data.insert(insert_at, entry)
+    save_list(list_name, data)
+    await interaction.response.send_message(
+        f"✅ Moved {et} #{entry_index} under category #{category_index}.", ephemeral=True
+    )
+    await update_list_dashboard(list_name)
+
 # ━━━ Viewing & Deploy ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 @bot.tree.command(name="view_lists", description="List all your lists")
 async def view_lists_cmd(interaction: discord.Interaction):
@@ -464,4 +506,3 @@ async def set_log_channel(interaction: discord.Interaction, channel: discord.Tex
 
 # Run
 bot.run(TOKEN)
-        
