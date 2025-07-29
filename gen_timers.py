@@ -1,6 +1,7 @@
+# gen_timers.py
+
 import os
 import time
-import asyncio
 import datetime
 import discord
 from discord.ext import commands, tasks
@@ -56,7 +57,6 @@ def build_gen_embed(list_name: str) -> discord.Embed:
     data = load_gen_list(list_name)
     now = time.time()
 
-    # Embed setup (use Tek color by default)
     embed = discord.Embed(
         title=list_name,
         color=TEK_COLOR,
@@ -66,59 +66,82 @@ def build_gen_embed(list_name: str) -> discord.Embed:
     embed.set_footer(text="Gravity List Bot • Powered by AZX")
 
     for idx, item in enumerate(data, start=1):
-        name     = item.get("name")
-        gen_type = item.get("type")
-        start_ts = item.get("timestamp", now)
+        name             = item.get("name")
+        gen_type         = item.get("type")
+        start_ts         = item.get("timestamp", now)
+        elapsed          = now - start_ts
 
-        # Total runtime and remaining seconds
-        if gen_type == "Tek":
-            total_sec = item.get("element", 0) * 64800 + item.get("shards", 0) * 648
-        else:
-            total_sec = item.get("imbued", 0) * 14400 + item.get("gas", 0) * 3600
+        # Initial fuel counts
+        initial_elements = item.get("element", 0)
+        initial_shards   = item.get("shards", 0)
 
-        end_ts    = start_ts + total_sec
-        remaining = max(0, end_ts - now)
+        # Durations
+        shard_duration   = 648      # seconds per shard
+        element_duration = 64800    # seconds per element
 
-        # Format remaining time
-        days, rem    = divmod(int(remaining), 86400)
-        hours, rem   = divmod(rem, 3600)
-        minutes, _   = divmod(rem, 60)
-        parts        = []
+        # Total fuel time
+        total_shard_time   = initial_shards * shard_duration
+        total_element_time = initial_elements * element_duration
+
+        total_fuel_time    = total_shard_time + total_element_time
+        remaining_time     = max(total_fuel_time - elapsed, 0)
+
+        # Remaining shards first
+        shards_used    = int(min(elapsed, total_shard_time) // shard_duration)
+        rem_shards     = max(initial_shards - shards_used, 0)
+
+        # Then elements
+        elapsed_after_shards = max(elapsed - total_shard_time, 0)
+        elems_used           = int(min(elapsed_after_shards, total_element_time) // element_duration)
+        rem_elements         = max(initial_elements - elems_used, 0)
+
+        # Format remaining time into days/hours/minutes (full words)
+        days    = remaining_time // 86400
+        hours   = (remaining_time % 86400) // 3600
+        minutes = (remaining_time % 3600) // 60
+        parts   = []
         if days:
-            parts.append(f"{days}d")
+            parts.append(f"{int(days)} days")
         if hours:
-            parts.append(f"{hours}h")
-        parts.append(f"{minutes}m")
+            parts.append(f"{int(hours)} hours")
+        parts.append(f"{int(minutes)} minutes")
         rem_str = " ".join(parts)
 
         # Timer icon
-        timer_icon = "✅" if remaining == 0 else "⏳"
+        timer_icon = "✅" if remaining_time == 0 else "⏳"
 
-        # Online/offline status
-        if remaining > 0:
+        # Status
+        if remaining_time > 0:
             status_emoji = "🟢"
             status_word  = "Online"
         else:
             status_emoji = "🔴"
             status_word  = "Offline"
 
-        # Remaining fuel counts
+        # Fuel info display
         if gen_type == "Tek":
-            rem_elems  = remaining // 64800
-            rem_shards = (remaining % 64800) // 648
-            fuel_info  = f"{int(rem_elems)} element / {int(rem_shards)} shards"
+            fuel_info  = f"{rem_shards} shards / {rem_elements} element"
             embed.color = TEK_COLOR
         else:
-            rem_imbued = remaining // 14400
-            rem_gas    = (remaining % 14400) // 3600
-            fuel_info  = f"{int(rem_gas)} gas / {int(rem_imbued)} imbued gas"
+            # For electrical, use 'gas' and 'imbued' similarly
+            initial_gas     = item.get("gas", 0)
+            initial_imbued  = item.get("imbued", 0)
+            total_gas_time  = initial_gas * 3600
+            total_imb_time  = initial_imbued * 14400
+            gas_used        = int(min(elapsed, total_gas_time) // 3600)
+            rem_gas         = max(initial_gas - gas_used, 0)
+            elapsed_after_gas = max(elapsed - total_gas_time, 0)
+            imb_used        = int(min(elapsed_after_gas, total_imb_time) // 14400)
+            rem_imbued      = max(initial_imbued - imb_used, 0)
+
+            fuel_info   = f"{rem_gas} gas / {rem_imbued} imbued gas"
             embed.color = ELEC_COLOR
 
         emoji      = GEN_EMOJIS.get(gen_type, "")
         entry_name = f"{emoji} __{name}__"
         value_text = (
-            f"{timer_icon} {rem_str} remaining   —   {fuel_info}   —   "
-            f"{status_emoji} {status_word}"
+            f"{timer_icon} {rem_str} remaining   —   "
+            f"{fuel_info}   —   {status_emoji} {status_word}"
         )
 
         embed.add_field(name=f"{idx}. {entry_name}", value=value_text, inline=False)
@@ -198,7 +221,6 @@ class GeneratorCog(commands.Cog):
                 f"❌ `{list_name}` not found.", ephemeral=True
             )
         data = load_gen_list(list_name)
-        # Reject duplicates
         if any(g["name"].lower() == gen_name.lower() for g in data):
             return await interaction.response.send_message(
                 f"❌ Generator `{gen_name}` already exists.", ephemeral=True
@@ -385,5 +407,5 @@ async def setup_gen_timers(bot: commands.Bot):
     except CommandAlreadyRegistered:
         pass
 
-# ─── Alias for bot.py import ──────────────────────────────────────────────────
+# Alias for import
 build_gen_timetable_embed = build_gen_embed
