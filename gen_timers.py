@@ -56,7 +56,7 @@ def build_gen_embed(list_name: str) -> discord.Embed:
     data = load_gen_list(list_name)
     now = time.time()
 
-    # Use Tek color for embed border
+    # Embed setup (use Tek color by default)
     embed = discord.Embed(
         title=list_name,
         color=TEK_COLOR,
@@ -70,20 +70,20 @@ def build_gen_embed(list_name: str) -> discord.Embed:
         gen_type = item.get("type")
         start_ts = item.get("timestamp", now)
 
-        # Calculate total runtime and remaining
+        # Total runtime and remaining seconds
         if gen_type == "Tek":
-            total_sec = item.get("shards", 0) * 648 + item.get("element", 0) * 64800
+            total_sec = item.get("element", 0) * 64800 + item.get("shards", 0) * 648
         else:
-            total_sec = item.get("gas", 0) * 3600 + item.get("imbued", 0) * 14400
+            total_sec = item.get("imbued", 0) * 14400 + item.get("gas", 0) * 3600
 
         end_ts    = start_ts + total_sec
         remaining = max(0, end_ts - now)
 
         # Format remaining time
-        days, rem = divmod(int(remaining), 86400)
-        hours, rem = divmod(rem, 3600)
-        minutes, _ = divmod(rem, 60)
-        parts = []
+        days, rem    = divmod(int(remaining), 86400)
+        hours, rem   = divmod(rem, 3600)
+        minutes, _   = divmod(rem, 60)
+        parts        = []
         if days:
             parts.append(f"{days}d")
         if hours:
@@ -91,18 +91,36 @@ def build_gen_embed(list_name: str) -> discord.Embed:
         parts.append(f"{minutes}m")
         rem_str = " ".join(parts)
 
-        # Status and fuel info
-        status = "✅" if remaining == 0 else "⏳"
-        if gen_type == "Tek":
-            fuel_info = f"{item.get('element', 0)}e / {item.get('shards', 0)}s"
+        # Timer icon
+        timer_icon = "✅" if remaining == 0 else "⏳"
+
+        # Online/offline status
+        if remaining > 0:
+            status_emoji = "🟢"
+            status_word  = "Online"
         else:
-            fuel_info = f"{item.get('gas', 0)}g / {item.get('imbued', 0)}ig"
+            status_emoji = "🔴"
+            status_word  = "Offline"
 
-        emoji     = GEN_EMOJIS.get(gen_type, "")
+        # Remaining fuel counts
+        if gen_type == "Tek":
+            rem_elems  = remaining // 64800
+            rem_shards = (remaining % 64800) // 648
+            fuel_info  = f"{int(rem_elems)} element / {int(rem_shards)} shards"
+            embed.color = TEK_COLOR
+        else:
+            rem_imbued = remaining // 14400
+            rem_gas    = (remaining % 14400) // 3600
+            fuel_info  = f"{int(rem_gas)} gas / {int(rem_imbued)} imbued gas"
+            embed.color = ELEC_COLOR
+
+        emoji      = GEN_EMOJIS.get(gen_type, "")
         entry_name = f"{emoji} __{name}__"
-        value_text = f"{status} {rem_str} remaining   —   {fuel_info}"
+        value_text = (
+            f"{timer_icon} {rem_str} remaining   —   {fuel_info}   —   "
+            f"{status_emoji} {status_word}"
+        )
 
-        # Add numbered field
         embed.add_field(name=f"{idx}. {entry_name}", value=value_text, inline=False)
 
     return embed
