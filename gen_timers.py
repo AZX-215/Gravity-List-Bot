@@ -102,7 +102,7 @@ def build_gen_embed(list_name: str) -> discord.Embed:
         rem_str = " ".join(parts)
 
         # Timer icon & status
-        timer_icon   = "⩇⩇:⩇⩇" if remaining_time == 0 else "⏱️"
+        timer_icon   = "⩇⩇:⩇⩇❗" if remaining_time == 0 else "⏱️"
         status_emoji = "🔴" if remaining_time == 0 else "🟢"
         status_word  = "Offline" if remaining_time == 0 else "Online"
 
