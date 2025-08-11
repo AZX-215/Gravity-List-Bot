@@ -28,6 +28,9 @@ GEN_EMOJIS      = {"Tek": "⚡", "Electrical": "🔌"}
 BACKOFF_SECONDS = 10 * 60   # pause updates for 10 minutes on 429
 LOW_THRESHOLD   = 12 * 3600 # 12 hours in seconds
 
+# Discord embed limits
+EMBED_FIELD_VALUE_MAX = 1024
+
 # ─── Utility: log to a configured channel ───────────────────────────────────────
 async def log_to_channel(bot: commands.Bot, message: str):
     cid = os.getenv("LOG_CHANNEL_ID")
@@ -46,9 +49,9 @@ ELEMENT_DURATION = 64800    # seconds per element burn
 
 def compute_tek_remaining(item: dict, now: float) -> tuple[int, int, int]:
     """Return (remaining_time_secs, rem_shards, rem_elements) for a Tek gen item."""
-    initial_elements = item.get("element", 0)
-    initial_shards   = item.get("shards", 0)
-    ts               = item.get("timestamp", now)
+    initial_elements = int(item.get("element", 0))
+    initial_shards   = int(item.get("shards", 0))
+    ts               = float(item.get("timestamp", now))
 
     elapsed = max(now - ts, 0)
 
@@ -79,6 +82,36 @@ def fmt_remaining(seconds: int) -> str:
         parts.append(f"{hours} hours")
     parts.append(f"{minutes} minutes")
     return " ".join(parts)
+
+# ─── Embed building helpers ────────────────────────────────────────────────────
+def _add_chunked_fields(embed: discord.Embed, lines: list[str], base_name: str = "Generators"):
+    """
+    Discord caps a single field value at 1024 chars.
+    This splits the combined lines into multiple fields under that limit.
+    """
+    if not lines:
+        embed.add_field(name=base_name, value="_No generators yet. Use `/add_gen_tek` or `/add_gen_electrical`._", inline=False)
+        return
+
+    chunks = []
+    current = ""
+    for line in lines:
+        # +1 for the newline if we add it
+        extra = len(line) + (1 if current else 0)
+        if len(current) + extra > EMBED_FIELD_VALUE_MAX:
+            chunks.append(current)
+            current = line
+        else:
+            current = f"{current}\n{line}" if current else line
+    if current:
+        chunks.append(current)
+
+    if len(chunks) == 1:
+        embed.add_field(name=base_name, value=chunks[0], inline=False)
+    else:
+        total = len(chunks)
+        for i, chunk in enumerate(chunks, start=1):
+            embed.add_field(name=f"{base_name} ({i}/{total})", value=chunk, inline=False)
 
 # ─── Self-healing dashboard refresh ────────────────────────────────────────────
 async def refresh_dashboard(bot: commands.Bot, list_name: str):
@@ -170,8 +203,10 @@ async def evaluate_and_ping(bot: commands.Bot, list_name: str):
         if 0 < remaining <= LOW_THRESHOLD and not alerted_low:
             rem_str = fmt_remaining(remaining)
             try:
-                await channel.send(f"<@&{role_id}> {emoji} **{name}** is **low on fuel** — {rem_str} left "
-                                   f"(🧩 {rem_shards} shards, 🔷 {rem_elements} element).")
+                await channel.send(
+                    f"<@&{role_id}> {emoji} **{name}** is **low on fuel** — {rem_str} left "
+                    f"(🧩 {rem_shards} shards, 🔷 {rem_elements} element)."
+                )
                 item["alerted_low"] = True
                 changed = True
             except Exception:
@@ -191,42 +226,37 @@ def build_gen_embed(list_name: str) -> discord.Embed:
     )
     embed.set_thumbnail(url=TEK_THUMBNAIL)
 
-    lines = []
     role_id = get_gen_list_role(list_name)
     if role_id:
         embed.description = f"<@&{role_id}>"
 
+    lines: list[str] = []
     for item in data:
         gtype = item.get("type", "Tek")
         emoji = GEN_EMOJIS.get(gtype, "⚙️")
         name  = item.get("name", "Unknown")
-        ts    = item.get("timestamp", now)  # legacy support
-        # Tek generators show countdown and remaining fuel
+
         if gtype == "Tek":
             remaining, rem_shards, rem_elements = compute_tek_remaining(item, now)
             rem_str = fmt_remaining(remaining)
-            low = remaining <= LOW_THRESHOLD
-            low_marker = " **(LOW)**" if low and remaining > 0 else ""
             if remaining == 0:
-                low_marker = " **(EMPTY)**"
-
-            line = f"{emoji} **{name}** — ⏳ {rem_str} — 🧩 {rem_shards} shards, 🔷 {rem_elements} element{low_marker}"
+                marker = " **(EMPTY)**"
+            elif remaining <= LOW_THRESHOLD:
+                marker = " **(LOW)**"
+            else:
+                marker = ""
+            line = f"{emoji} **{name}** — ⏳ {rem_str} — 🧩 {rem_shards} shards, 🔷 {rem_elements} element{marker}"
             lines.append(line)
 
         elif gtype == "Electrical":
-            gas     = item.get("gas", 0)
-            imbued  = item.get("imbued", 0)
+            gas     = int(item.get("gas", 0))
+            imbued  = int(item.get("imbued", 0))
             line = f"{emoji} **{name}** — ⛽ {gas} gas, ✨ {imbued} imbued"
             lines.append(line)
 
-    if not lines:
-        lines.append("_No generators yet. Use `/add_gen_tek` or `/add_gen_electrical`._")
+    # Add as chunked fields to respect 1024/field limit
+    _add_chunked_fields(embed, lines, base_name="Generators")
 
-    joined = "\n".join(lines)
-    if len(joined) > 5500:
-        joined = joined[:5490] + "\n…"
-
-    embed.add_field(name="Generators", value=joined, inline=False)
     embed.set_footer(text=f"Updated {datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC")
     return embed
 
@@ -311,7 +341,7 @@ class GeneratorCog(commands.Cog):
                 f"❌ `{list_name}` not found.", ephemeral=True
             )
         data = load_gen_list(list_name)
-        if any(g["name"].lower() == gen_name.lower() for g in data):
+        if any(g.get("name","").lower() == gen_name.lower() for g in data):
             return await interaction.response.send_message(
                 f"❌ Generator `{gen_name}` already exists.", ephemeral=True
             )
@@ -341,7 +371,7 @@ class GeneratorCog(commands.Cog):
                 f"❌ `{list_name}` not found.", ephemeral=True
             )
         data = load_gen_list(list_name)
-        if any(g["name"].lower() == gen_name.lower() for g in data):
+        if any(g.get("name","").lower() == gen_name.lower() for g in data):
             return await interaction.response.send_message(
                 f"❌ Generator `{gen_name}` already exists.", ephemeral=True
             )
@@ -373,8 +403,8 @@ class GeneratorCog(commands.Cog):
         data = load_gen_list(list_name)
         for item in data:
             if item.get("name") == gen_name and item.get("type") == "Tek":
-                item["element"] = element
-                item["shards"]  = shards
+                item["element"] = int(element)
+                item["shards"]  = int(shards)
                 # Reset alert flags on manual edit (refuel/adjustment)
                 item["alerted_low"] = False
                 item["alerted_empty"] = False
@@ -413,8 +443,8 @@ class GeneratorCog(commands.Cog):
         data = load_gen_list(list_name)
         for item in data:
             if item.get("name") == gen_name and item.get("type") == "Electrical":
-                item["gas"]    = gas
-                item["imbued"] = imbued
+                item["gas"]    = int(gas)
+                item["imbued"] = int(imbued)
                 save_gen_list(list_name, data)
                 await interaction.response.send_message(
                     f"✅ Updated Electrical generator `{gen_name}`.", ephemeral=True
