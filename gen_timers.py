@@ -16,7 +16,7 @@ from data_manager import (
     get_gen_list_role,
     save_gen_dashboard_id,
     get_gen_dashboard_id,
-    set_gen_item_alerts_muted,  # NEW: use helper to toggle mute
+    set_gen_item_alerts_muted,  # for mute/unmute commands
 )
 
 # ─── Configuration ──────────────────────
@@ -106,10 +106,7 @@ def fmt_remaining(seconds: int) -> str:
 
 # ─── Embed building helpers ────────────────────────────────────────────────────
 def _add_chunked_fields(embed: discord.Embed, lines: list[str], base_name: str = "Generators"):
-    """
-    Discord caps a single field value at 1024 chars.
-    This splits the combined lines into multiple fields under that limit.
-    """
+    """Split long values so each field value ≤ 1024 chars."""
     if not lines:
         embed.add_field(
             name=base_name,
@@ -152,7 +149,6 @@ async def refresh_dashboard(bot: commands.Bot, list_name: str):
         msg = await ch.fetch_message(msg_id)
         await msg.edit(embed=embed)
     except discord.NotFound:
-        # Message was deleted—recreate and save the new ID
         sent = await ch.send(embed=embed)
         save_gen_dashboard_id(list_name, ch.id, sent.id)
         await log_to_channel(bot, f"ℹ️ Recreated missing gen dashboard for `{list_name}` in <#{ch_id}>.")
@@ -163,20 +159,18 @@ async def refresh_dashboard(bot: commands.Bot, list_name: str):
 
 # ─── Automatic pings (LOW / EMPTY) for both Tek & Electrical ───────────────────
 async def evaluate_and_ping(bot: commands.Bot, list_name: str):
-    """Ping the configured role when a gen first goes LOW (≤12h) or EMPTY (0).
-    Flags (alerted_low/alerted_empty) auto-reset when refueled.
-    """
+    """Ping when a gen first goes LOW (≤12h) or EMPTY (0). Flags auto-reset when refueled."""
     data = load_gen_list(list_name)
     if not data:
         return
 
     role_id = get_gen_list_role(list_name)
     if not role_id:
-        return  # no ping role configured
+        return
 
     dash = get_gen_dashboard_id(list_name)
     if not dash:
-        return  # no dashboard channel/message stored yet
+        return
 
     ch_id, _ = dash
     channel = bot.get_channel(ch_id)
@@ -216,7 +210,7 @@ async def evaluate_and_ping(bot: commands.Bot, list_name: str):
 
         name = item.get("name", "Unknown")
 
-        # EMPTY ping (highest priority)
+        # EMPTY ping
         if remaining == 0 and not alerted_empty:
             try:
                 await channel.send(
@@ -226,7 +220,6 @@ async def evaluate_and_ping(bot: commands.Bot, list_name: str):
                 changed = True
             except Exception:
                 pass
-            # Mark low as satisfied too
             if not item.get("alerted_low", False):
                 item["alerted_low"] = True
                 changed = True
@@ -253,15 +246,21 @@ def build_gen_embed(list_name: str) -> discord.Embed:
     data = load_gen_list(list_name)
     now = time.time()
 
+    # Pick a color (Tek if any, else Electrical color)
     embed = discord.Embed(
         title=list_name,
         color=TEK_COLOR if any(item.get("type") == "Tek" for item in data) else ELEC_COLOR
     )
     embed.set_thumbnail(url=TEK_THUMBNAIL)
 
+    # Description: role mention (if set), then signature line, then local-time token
+    desc_lines = []
     role_id = get_gen_list_role(list_name)
     if role_id:
-        embed.description = f"<@&{role_id}>"
+        desc_lines.append(f"<@&{role_id}>")
+    desc_lines.append("built by -AZX")
+    desc_lines.append(f"Updated <t:{int(time.time())}:f>")
+    embed.description = "\n".join(desc_lines)
 
     lines: list[str] = []
     for item in data:
@@ -269,30 +268,28 @@ def build_gen_embed(list_name: str) -> discord.Embed:
         emoji = GEN_EMOJIS.get(gtype, "⚙️")
         name  = item.get("name", "Unknown")
         muted = bool(item.get("alerts_muted", False))
-
+        # base name + mute indicator
         name_part = f"{emoji} **{name}**" + (" 🔕" if muted else "")
 
         if gtype == "Tek":
             remaining, rem_shards, rem_elements = compute_tek_remaining(item, now)
+            status = "🟢 ONLINE" if remaining > 0 else "❌ OFFLINE"
             marker = " **(EMPTY)**" if remaining == 0 else (" **(LOW)**" if remaining <= LOW_THRESHOLD else "")
             lines.append(
-                f"{name_part} — ⏳ {fmt_remaining(remaining)} — "
+                f"{name_part} — {status} — ⏳ {fmt_remaining(remaining)} — "
                 f"🧩 {rem_shards} shards, 🔷 {rem_elements} element{marker}"
             )
 
         elif gtype == "Electrical":
             remaining, rem_gas, rem_imbued = compute_elec_remaining(item, now)
+            status = "🟢 ONLINE" if remaining > 0 else "❌ OFFLINE"
             marker = " **(EMPTY)**" if remaining == 0 else (" **(LOW)**" if remaining <= LOW_THRESHOLD else "")
             lines.append(
-                f"{name_part} — ⏳ {fmt_remaining(remaining)} — "
+                f"{name_part} — {status} — ⏳ {fmt_remaining(remaining)} — "
                 f"⛽ {rem_gas} gas, ✨ {rem_imbued} imbued{marker}"
             )
 
-    # Chunk long content across multiple fields (1024 char per field)
     _add_chunked_fields(embed, lines, base_name="Generators")
-
-    # Footer shows each viewer's local time + signature
-    embed.set_footer(text=f"Updated <t:{int(time.time())}:f> • built by -AZX")
     return embed
 
 # ─── Cog ───────────────────────────────────────────────────────────────────────
@@ -316,7 +313,6 @@ class GeneratorCog(commands.Cog):
             try:
                 await refresh_dashboard(self.bot, name)   # self-heal + update
                 await evaluate_and_ping(self.bot, name)   # alerts
-
             except discord.HTTPException as e:
                 if getattr(e, 'status', None) == 429:
                     self.backoff_until = time.time() + BACKOFF_SECONDS
@@ -438,7 +434,6 @@ class GeneratorCog(commands.Cog):
                 item["element"] = int(element)
                 item["shards"]  = int(shards)
                 item["timestamp"] = time.time()  # reset timer on edit (fresh refuel)
-                # Reset alert flags on manual edit
                 item["alerted_low"] = False
                 item["alerted_empty"] = False
                 save_gen_list(list_name, data)
@@ -479,7 +474,6 @@ class GeneratorCog(commands.Cog):
                 item["gas"]     = int(gas)
                 item["imbued"]  = int(imbued)
                 item["timestamp"] = time.time()  # reset timer on edit (fresh refuel)
-                # Reset alert flags on manual edit
                 item["alerted_low"] = False
                 item["alerted_empty"] = False
                 save_gen_list(list_name, data)
@@ -494,54 +488,26 @@ class GeneratorCog(commands.Cog):
         )
 
     @app_commands.command(name="remove_gen", description="Remove a generator entry")
-    @app_commands.describe(
-        list_name="Generator list",
-        gen_name="Generator to remove"
-    )
-    async def remove_gen(
-        self,
-        interaction: discord.Interaction,
-        list_name: str,
-        gen_name: str
-    ):
+    @app_commands.describe(list_name="Generator list", gen_name="Generator to remove")
+    async def remove_gen(self, interaction: discord.Interaction, list_name: str, gen_name: str):
         if not gen_list_exists(list_name):
-            return await interaction.response.send_message(
-                f"❌ `{list_name}` not found.", ephemeral=True
-            )
+            return await interaction.response.send_message(f"❌ `{list_name}` not found.", ephemeral=True)
         data = load_gen_list(list_name)
         new_data = [i for i in data if i.get("name") != gen_name]
         if len(new_data) == len(data):
-            return await interaction.response.send_message(
-                f"❌ Generator `{gen_name}` not found.", ephemeral=True
-            )
+            return await interaction.response.send_message(f"❌ Generator `{gen_name}` not found.", ephemeral=True)
         save_gen_list(list_name, new_data)
-        await interaction.response.send_message(
-            f"🗑️ Removed `{gen_name}`.", ephemeral=True
-        )
+        await interaction.response.send_message(f"🗑️ Removed `{gen_name}`.", ephemeral=True)
         await refresh_dashboard(self.bot, list_name)
 
     @app_commands.command(name="reorder_gen", description="Reorder generator entries by index")
-    @app_commands.describe(
-        list_name="Generator list",
-        from_index="Current position (1-based)",
-        to_index="New position (1-based)"
-    )
-    async def reorder_gen(
-        self,
-        interaction: discord.Interaction,
-        list_name: str,
-        from_index: int,
-        to_index: int
-    ):
+    @app_commands.describe(list_name="Generator list", from_index="Current position (1-based)", to_index="New position (1-based)")
+    async def reorder_gen(self, interaction: discord.Interaction, list_name: str, from_index: int, to_index: int):
         if not gen_list_exists(list_name):
-            return await interaction.response.send_message(
-                f"❌ `{list_name}` not found.", ephemeral=True
-            )
+            return await interaction.response.send_message(f"❌ `{list_name}` not found.", ephemeral=True)
         data = load_gen_list(list_name)
         if not (1 <= from_index <= len(data)) or not (1 <= to_index <= len(data)):
-            return await interaction.response.send_message(
-                "❌ Index out of range.", ephemeral=True
-            )
+            return await interaction.response.send_message("❌ Index out of range.", ephemeral=True)
         item = data.pop(from_index - 1)
         data.insert(to_index - 1, item)
         save_gen_list(list_name, data)
@@ -551,34 +517,17 @@ class GeneratorCog(commands.Cog):
         await refresh_dashboard(self.bot, list_name)
 
     @app_commands.command(name="set_gen_role", description="Set a role to ping when low or expiring soon")
-    @app_commands.describe(
-        list_name="Generator list",
-        role="Role to ping on low fuel/expiry"
-    )
-    async def set_gen_role(
-        self,
-        interaction: discord.Interaction,
-        list_name: str,
-        role: discord.Role
-    ):
+    @app_commands.describe(list_name="Generator list", role="Role to ping on low fuel/expiry")
+    async def set_gen_role(self, interaction: discord.Interaction, list_name: str, role: discord.Role):
         if not gen_list_exists(list_name):
-            return await interaction.response.send_message(
-                f"❌ `{list_name}` not found.", ephemeral=True
-            )
+            return await interaction.response.send_message(f"❌ `{list_name}` not found.", ephemeral=True)
         set_gen_list_role(list_name, role.id)
-        await interaction.response.send_message(
-            f"✅ Ping role set for `{list_name}`.", ephemeral=True
-        )
+        await interaction.response.send_message(f"✅ Ping role set for `{list_name}`.", ephemeral=True)
 
     # NEW: mute/unmute per-gen alerts
     @app_commands.command(name="mute_gen_alerts", description="Mute LOW/EMPTY alert pings for a generator")
     @app_commands.describe(list_name="Generator list", gen_name="Generator to mute")
-    async def mute_gen_alerts(
-        self,
-        interaction: discord.Interaction,
-        list_name: str,
-        gen_name: str
-    ):
+    async def mute_gen_alerts(self, interaction: discord.Interaction, list_name: str, gen_name: str):
         if not gen_list_exists(list_name):
             return await interaction.response.send_message(f"❌ `{list_name}` not found.", ephemeral=True)
         ok = set_gen_item_alerts_muted(list_name, gen_name, True)
@@ -589,12 +538,7 @@ class GeneratorCog(commands.Cog):
 
     @app_commands.command(name="unmute_gen_alerts", description="Unmute LOW/EMPTY alert pings for a generator")
     @app_commands.describe(list_name="Generator list", gen_name="Generator to unmute")
-    async def unmute_gen_alerts(
-        self,
-        interaction: discord.Interaction,
-        list_name: str,
-        gen_name: str
-    ):
+    async def unmute_gen_alerts(self, interaction: discord.Interaction, list_name: str, gen_name: str):
         if not gen_list_exists(list_name):
             return await interaction.response.send_message(f"❌ `{list_name}` not found.", ephemeral=True)
         ok = set_gen_item_alerts_muted(list_name, gen_name, False)
