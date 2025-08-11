@@ -75,7 +75,10 @@ async def update_list_dashboard(list_name: str):
 def build_embed(list_name: str) -> discord.Embed:
     data = load_list(list_name)
     # Sort by category according to CATEGORY_ORDER
-    data.sort(key=lambda x: CATEGORY_ORDER.index(x["category"]) if x["category"] in CATEGORY_ORDER else len(CATEGORY_ORDER))
+    data.sort(
+        key=lambda x: CATEGORY_ORDER.index(x["category"])
+        if x["category"] in CATEGORY_ORDER else len(CATEGORY_ORDER)
+    )
     embed = discord.Embed(title=f"__**{list_name}**__", color=0x808080)
     for it in data:
         cat = it["category"]
@@ -89,8 +92,9 @@ def build_embed(list_name: str) -> discord.Embed:
             prefix = CATEGORY_EMOJIS.get(cat, "")
             embed.add_field(name=f"{prefix}   {it['name']}", value="​", inline=False)
             if it.get("comment"):
-    add_chunked_comment_field(embed, it["comment"])
+                add_chunked_comment_field(embed, it["comment"])
     return embed
+
 
 @bot.event
 async def on_ready():
