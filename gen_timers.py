@@ -259,12 +259,13 @@ def build_gen_embed(list_name: str) -> discord.Embed:
     embed.description = f"<@&{role_id}>" if role_id else None
 
     lines: list[str] = []
-    for item in data:
+    # Numbered entries + your original styling (⏱️, ・, and the EMPTY/LOW markers)
+    for idx, item in enumerate(data, start=1):
         gtype = item.get("type", "Tek")
         emoji = GEN_EMOJIS.get(gtype, "⚙️")
         name  = item.get("name", "Unknown")
         muted = bool(item.get("alerts_muted", False))
-        name_part = f"{emoji} **{name}**" + (" 🔕" if muted else "")
+        name_part = f"**{idx}.** {emoji} **{name}**" + (" 🔕" if muted else "")
 
         if gtype == "Tek":
             remaining, rem_shards, rem_elements = compute_tek_remaining(item, now)
@@ -276,7 +277,7 @@ def build_gen_embed(list_name: str) -> discord.Embed:
             )
         elif gtype == "Electrical":
             remaining, rem_gas, rem_imbued = compute_elec_remaining(item, now)
-            status = "🟢 ONLINE" if remaining > 0 else "❌ OFFLINE"
+            status = "🟢・ ONLINE" if remaining > 0 else "❌ OFFLINE"
             marker = " **・❗ EMPTY ❗**" if remaining == 0 else ("**・⚠️ LOW FUEL ⚠️**" if remaining <= LOW_THRESHOLD else "")
             lines.append(
                 f"{name_part} — {status} — ⏱️ {fmt_remaining(remaining)} — "
@@ -285,10 +286,10 @@ def build_gen_embed(list_name: str) -> discord.Embed:
 
     _add_chunked_fields(embed, lines, base_name="Generators")
 
-    # Signature + local-time update at the BOTTOM (Discord renders <t:…> in field values)
+    # Signature + local-time update at the BOTTOM
     embed.add_field(
         name="​",
-        value=f"*built by AZX*\nUpdated <t:{int(time.time())}:f>",
+        value=f"*built by -AZX*\nUpdated <t:{int(time.time())}:f>",
         inline=False
     )
 
@@ -347,7 +348,7 @@ class GeneratorCog(commands.Cog):
             )
         delete_gen_list(name)
         await interaction.response.send_message(
-            f"🗑️ Deleted generator list `{name}`.", ephemeral=True
+                f"🗑️ Deleted generator list `{name}`.", ephemeral=True
         )
         await refresh_dashboard(self.bot, name)
 
@@ -565,7 +566,3 @@ async def setup(bot: commands.Bot):
 
 # alias for import compatibility (legacy)
 build_gen_timetable_embed = build_gen_embed
-
-
-
-
