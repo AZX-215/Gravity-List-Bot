@@ -269,18 +269,18 @@ def build_gen_embed(list_name: str) -> discord.Embed:
         if gtype == "Tek":
             remaining, rem_shards, rem_elements = compute_tek_remaining(item, now)
             status = "🟢 ONLINE" if remaining > 0 else "❌ OFFLINE"
-            marker = " **(EMPTY)**" if remaining == 0 else (" **(LOW)**" if remaining <= LOW_THRESHOLD else "")
+            marker = " **(EMPTY)**" if remaining == 0 else (" **(⚠️ LOW Fuel)**" if remaining <= LOW_THRESHOLD else "")
             lines.append(
                 f"{name_part} — {status} — ⏳ {fmt_remaining(remaining)} — "
-                f"🧩 {rem_shards} shards, 🔷 {rem_elements} element{marker}"
+                f"・ {rem_shards} shards, ・ {rem_elements} element{marker}"
             )
         elif gtype == "Electrical":
             remaining, rem_gas, rem_imbued = compute_elec_remaining(item, now)
             status = "🟢 ONLINE" if remaining > 0 else "❌ OFFLINE"
-            marker = " **(EMPTY)**" if remaining == 0 else (" **(LOW)**" if remaining <= LOW_THRESHOLD else "")
+            marker = " **(EMPTY)**" if remaining == 0 else (" **(⚠️ LOW Fuel)**" if remaining <= LOW_THRESHOLD else "")
             lines.append(
                 f"{name_part} — {status} — ⏳ {fmt_remaining(remaining)} — "
-                f"⛽ {rem_gas} gas, ✨ {rem_imbued} imbued{marker}"
+                f"・ {rem_gas} gas, ・ {rem_imbued} imbued{marker}"
             )
 
     _add_chunked_fields(embed, lines, base_name="Generators")
@@ -565,3 +565,4 @@ async def setup(bot: commands.Bot):
 
 # alias for import compatibility (legacy)
 build_gen_timetable_embed = build_gen_embed
+
