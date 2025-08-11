@@ -4,22 +4,19 @@ import time
 from typing import Any, Dict, List, Optional, Tuple
 
 # ───────────────────────────── Storage paths ─────────────────────────────
-# You can override these with environment variables if needed.
 BASE_DATA = os.getenv("DATABASE_PATH", "./lists/data.json")
 BASE_DIR  = os.path.dirname(BASE_DATA) or "."
 
-LISTS_DIR            = os.path.join(BASE_DIR, "lists")                     # each regular list stored as its own JSON
+LISTS_DIR            = os.path.join(BASE_DIR, "lists")
 DASHBOARDS_PATH      = os.getenv("DASHBOARDS_PATH")      or os.path.join(BASE_DIR, "dashboards.json")
 
-GEN_LISTS_DIR        = os.path.join(BASE_DIR, "generator_lists")           # each gen list stored as its own JSON
+GEN_LISTS_DIR        = os.path.join(BASE_DIR, "generator_lists")
 GEN_DASHBOARDS_PATH  = os.getenv("GEN_DASHBOARDS_PATH")  or os.path.join(BASE_DIR, "generator_dashboards.json")
 
-TIMERS_PATH          = os.path.join(BASE_DIR, "timers.json")               # standalone timers data
-
+TIMERS_PATH          = os.path.join(BASE_DIR, "timers.json")
 
 # ───────────────────────────── I/O helpers ──────────────────────────────
 def _ensure_dir(path: str) -> None:
-    """Ensure parent directory exists for a file path, or the directory itself."""
     base = path if os.path.isdir(path) else os.path.dirname(path)
     if base and not os.path.exists(base):
         os.makedirs(base, exist_ok=True)
@@ -39,7 +36,6 @@ def _safe_write_json(path: str, data: Any) -> None:
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
     os.replace(tmp, path)
-
 
 # ───────────────────────── Regular lists (non-gen) ──────────────────────
 def list_path(name: str) -> str:
@@ -83,7 +79,6 @@ def save_dashboard_id(list_name: str, channel_id: int, message_id: int) -> None:
     data[list_name] = [int(channel_id), int(message_id)]
     _safe_write_json(DASHBOARDS_PATH, data)
 
-
 # ───────────────────────────── Generator lists ──────────────────────────
 def gen_path(name: str) -> str:
     return os.path.join(GEN_LISTS_DIR, f"{name}.json")
@@ -92,11 +87,21 @@ def gen_list_exists(name: str) -> bool:
     return os.path.exists(gen_path(name))
 
 def _default_gen_doc() -> Dict[str, Any]:
-    # Schema: { "role_id": Optional[int], "items": [ { ... per-gen ... } ] }
     return {"role_id": None, "items": []}
 
+def _wrap_legacy(raw: Any) -> Dict[str, Any]:
+    """Accept older file shapes and wrap into the current schema."""
+    if isinstance(raw, dict):
+        return raw
+    if isinstance(raw, list):
+        # Old top-level list of items -> wrap
+        return {"role_id": None, "items": raw}
+    # Anything else, fall back to empty doc
+    return _default_gen_doc()
+
 def _load_gen_doc(name: str) -> Dict[str, Any]:
-    doc = _safe_read_json(gen_path(name), default=_default_gen_doc())
+    raw = _safe_read_json(gen_path(name), default=_default_gen_doc())
+    doc = _wrap_legacy(raw)
     # Normalize / migrate items so older files pick up new fields
     changed = _normalize_gen_items(doc)
     if changed:
@@ -110,33 +115,56 @@ def _normalize_gen_items(doc: Dict[str, Any]) -> bool:
     """Ensure all items have the latest schema keys. Returns True if doc was changed."""
     items = doc.get("items", [])
     changed = False
-    for item in items:
+    # Only keep items that are dict-like; ignore garbage gracefully
+    normalized_items: List[Dict[str, Any]] = []
+    for it in items:
+        if not isinstance(it, dict):
+            # best-effort upgrade if it looks like [name, type, a, b]
+            try:
+                name, gtype, a, b = it[0], it[1], it[2], it[3]
+                it = {"name": str(name), "type": str(gtype)}
+                if str(gtype).lower().startswith("tek"):
+                    it.update({"element": int(a), "shards": int(b), "gas": 0, "imbued": 0})
+                else:
+                    it.update({"element": 0, "shards": 0, "gas": int(a), "imbued": int(b)})
+                changed = True
+            except Exception:
+                # skip unknown list shapes
+                continue
+
         # required keys with defaults
-        if "type" not in item:            item["type"] = "Tek"; changed = True
-        if "name" not in item:            item["name"] = "Unknown"; changed = True
+        if "type" not in it:            it["type"] = "Tek"; changed = True
+        if "name" not in it:            it["name"] = "Unknown"; changed = True
 
         # Tek fields
-        if "element" not in item:         item["element"] = 0; changed = True
-        if "shards" not in item:          item["shards"] = 0; changed = True
+        if "element" not in it:         it["element"] = 0; changed = True
+        if "shards" not in it:          it["shards"] = 0; changed = True
 
         # Electrical fields
-        if "gas" not in item:             item["gas"] = 0; changed = True
-        if "imbued" not in item:          item["imbued"] = 0; changed = True
+        if "gas" not in it:             it["gas"] = 0; changed = True
+        if "imbued" not in it:          it["imbued"] = 0; changed = True
 
         # timing / alerts
-        if "timestamp" not in item:       item["timestamp"] = time.time(); changed = True
-        if "alerted_low" not in item:     item["alerted_low"] = False; changed = True
-        if "alerted_empty" not in item:   item["alerted_empty"] = False; changed = True
+        if "timestamp" not in it:       it["timestamp"] = time.time(); changed = True
+        if "alerted_low" not in it:     it["alerted_low"] = False; changed = True
+        if "alerted_empty" not in it:   it["alerted_empty"] = False; changed = True
 
-        # NEW: optional metadata
-        if "notes" not in item:           item["notes"] = ""; changed = True
-        if "alerts_muted" not in item:    item["alerts_muted"] = False; changed = True
+        # optional metadata
+        if "notes" not in it:           it["notes"] = ""; changed = True
+        if "alerts_muted" not in it:    it["alerts_muted"] = False; changed = True
 
+        normalized_items.append(it)
+
+    # replace with normalized list
+    if normalized_items != items:
+        doc["items"] = normalized_items
+        changed = True
+
+    # role_id shape
     if not isinstance(doc.get("role_id", None), (int, type(None))):
         doc["role_id"] = None
         changed = True
 
-    doc["items"] = items
     return changed
 
 def load_gen_list(name: str) -> List[Dict[str, Any]]:
@@ -149,11 +177,9 @@ def save_gen_list(name: str, items: List[Dict[str, Any]]) -> None:
     _save_gen_doc(name, doc)
 
 def delete_gen_list(name: str) -> None:
-    # Remove the list file
     p = gen_path(name)
     if os.path.exists(p):
         os.remove(p)
-    # Clean up any stored dashboard mapping
     data = _safe_read_json(GEN_DASHBOARDS_PATH, default={})
     if name in data:
         del data[name]
@@ -169,11 +195,7 @@ def get_all_gen_list_names() -> List[str]:
 
 def add_to_gen_list(list_name: str, gen_name: str, gtype: str,
                     element: int, shards: int, gas: int, imbued: int) -> None:
-    """
-    Add a generator entry to a list, initializing timestamp and alert flags.
-    - Tek: uses 'element' and 'shards'
-    - Electrical: uses 'gas' and 'imbued'
-    """
+    """Add a generator entry; initialize timestamp and alert flags."""
     doc = _load_gen_doc(list_name)
     items = doc.get("items", [])
     now = time.time()
@@ -189,8 +211,8 @@ def add_to_gen_list(list_name: str, gen_name: str, gtype: str,
             "timestamp": now,
             "alerted_low": False,
             "alerted_empty": False,
-            "alerts_muted": False,   # NEW
-            "notes": "",             # NEW
+            "alerts_muted": False,
+            "notes": "",
         }
     else:
         item = {
@@ -203,8 +225,8 @@ def add_to_gen_list(list_name: str, gen_name: str, gtype: str,
             "timestamp": now,
             "alerted_low": False,
             "alerted_empty": False,
-            "alerts_muted": False,   # NEW
-            "notes": "",             # NEW
+            "alerts_muted": False,
+            "notes": "",
         }
 
     items.append(item)
@@ -240,7 +262,7 @@ def save_gen_dashboard_id(list_name: str, channel_id: int, message_id: int) -> N
     data[list_name] = [int(channel_id), int(message_id)]
     _safe_write_json(GEN_DASHBOARDS_PATH, data)
 
-# ─────────────────────────── Per-item helpers (NEW) ────────────────────────────
+# ─────────────────────────── Per-item helpers ────────────────────────────
 def _find_gen_item(doc: Dict[str, Any], gen_name: str) -> Tuple[Optional[int], Optional[Dict[str, Any]]]:
     items = doc.get("items", [])
     for idx, it in enumerate(items):
@@ -277,7 +299,6 @@ def set_gen_item_alerts_muted(list_name: str, gen_name: str, muted: bool) -> boo
     doc["items"][idx] = it
     _save_gen_doc(list_name, doc)
     return True
-
 
 # ─────────────────────────────── Timers API ─────────────────────────────
 def load_timers() -> Dict[str, Any]:
