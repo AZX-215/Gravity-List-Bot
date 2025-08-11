@@ -15,7 +15,8 @@ from data_manager import (
     set_gen_list_role,
     get_gen_list_role,
     save_gen_dashboard_id,
-    get_gen_dashboard_id
+    get_gen_dashboard_id,
+    set_gen_item_alerts_muted,  # NEW: use helper to toggle mute
 )
 
 # ─── Configuration ──────────────────────
@@ -196,6 +197,10 @@ async def evaluate_and_ping(bot: commands.Bot, list_name: str):
         else:
             continue
 
+        # Respect per-item mute
+        if bool(item.get("alerts_muted", False)):
+            continue
+
         alerted_low   = bool(item.get("alerted_low", False))
         alerted_empty = bool(item.get("alerted_empty", False))
 
@@ -263,12 +268,15 @@ def build_gen_embed(list_name: str) -> discord.Embed:
         gtype = item.get("type", "Tek")
         emoji = GEN_EMOJIS.get(gtype, "⚙️")
         name  = item.get("name", "Unknown")
+        muted = bool(item.get("alerts_muted", False))
+
+        name_part = f"{emoji} **{name}**" + (" 🔕" if muted else "")
 
         if gtype == "Tek":
             remaining, rem_shards, rem_elements = compute_tek_remaining(item, now)
             marker = " **(EMPTY)**" if remaining == 0 else (" **(LOW)**" if remaining <= LOW_THRESHOLD else "")
             lines.append(
-                f"{emoji} **{name}** — ⏳ {fmt_remaining(remaining)} — "
+                f"{name_part} — ⏳ {fmt_remaining(remaining)} — "
                 f"🧩 {rem_shards} shards, 🔷 {rem_elements} element{marker}"
             )
 
@@ -276,7 +284,7 @@ def build_gen_embed(list_name: str) -> discord.Embed:
             remaining, rem_gas, rem_imbued = compute_elec_remaining(item, now)
             marker = " **(EMPTY)**" if remaining == 0 else (" **(LOW)**" if remaining <= LOW_THRESHOLD else "")
             lines.append(
-                f"{emoji} **{name}** — ⏳ {fmt_remaining(remaining)} — "
+                f"{name_part} — ⏳ {fmt_remaining(remaining)} — "
                 f"⛽ {rem_gas} gas, ✨ {rem_imbued} imbued{marker}"
             )
 
@@ -562,8 +570,48 @@ class GeneratorCog(commands.Cog):
             f"✅ Ping role set for `{list_name}`.", ephemeral=True
         )
 
-# ─── Cog setup for bot.py ──────────────────────────────────────────────────────
+    # NEW: mute/unmute per-gen alerts
+    @app_commands.command(name="mute_gen_alerts", description="Mute LOW/EMPTY alert pings for a generator")
+    @app_commands.describe(list_name="Generator list", gen_name="Generator to mute")
+    async def mute_gen_alerts(
+        self,
+        interaction: discord.Interaction,
+        list_name: str,
+        gen_name: str
+    ):
+        if not gen_list_exists(list_name):
+            return await interaction.response.send_message(f"❌ `{list_name}` not found.", ephemeral=True)
+        ok = set_gen_item_alerts_muted(list_name, gen_name, True)
+        if not ok:
+            return await interaction.response.send_message(f"❌ Generator `{gen_name}` not found.", ephemeral=True)
+        await interaction.response.send_message(f"🔕 Alerts muted for `{gen_name}`.", ephemeral=True)
+        await refresh_dashboard(self.bot, list_name)
+
+    @app_commands.command(name="unmute_gen_alerts", description="Unmute LOW/EMPTY alert pings for a generator")
+    @app_commands.describe(list_name="Generator list", gen_name="Generator to unmute")
+    async def unmute_gen_alerts(
+        self,
+        interaction: discord.Interaction,
+        list_name: str,
+        gen_name: str
+    ):
+        if not gen_list_exists(list_name):
+            return await interaction.response.send_message(f"❌ `{list_name}` not found.", ephemeral=True)
+        ok = set_gen_item_alerts_muted(list_name, gen_name, False)
+        if not ok:
+            return await interaction.response.send_message(f"❌ Generator `{gen_name}` not found.", ephemeral=True)
+        await interaction.response.send_message(f"🔔 Alerts unmuted for `{gen_name}`.", ephemeral=True)
+        await refresh_dashboard(self.bot, list_name)
+
+# ─── Cog setup for compatibility ───────────────────────────────────────────────
 async def setup_gen_timers(bot: commands.Bot):
+    try:
+        await bot.add_cog(GeneratorCog(bot))
+    except CommandAlreadyRegistered:
+        pass
+
+# Some loaders expect 'setup' directly
+async def setup(bot: commands.Bot):
     try:
         await bot.add_cog(GeneratorCog(bot))
     except CommandAlreadyRegistered:
