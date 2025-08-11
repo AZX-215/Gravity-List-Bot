@@ -26,6 +26,31 @@ CATEGORY_EMOJIS = {
     "Owner": "👑", "Friend": "🟢", "Ally": "🔵",
     "Beta":  "🟡", "Enemy":  "🔴", "Item":  "⚫"
 }
+
+# --- Embed safety helpers (avoid 1024-char field value limit) ---
+EMBED_FIELD_VALUE_MAX = 1024
+
+def add_chunked_comment_field(embed: discord.Embed, comment_text: str) -> None:
+    """Add a comment as one or more fields, each ≤1024 chars, keeping italics."""
+    if not comment_text:
+        return
+    s = str(comment_text)
+    if len(s) <= EMBED_FIELD_VALUE_MAX:
+        embed.add_field(name="​", value=f"*{s}*", inline=False)
+        return
+
+    parts = []
+    start = 0
+    n = len(s)
+    while start < n:
+        parts.append(s[start:start + EMBED_FIELD_VALUE_MAX])
+        start += EMBED_FIELD_VALUE_MAX
+
+    total = len(parts)
+    for i, part in enumerate(parts, start=1):
+        suffix = "" if i == 1 else f" (cont. {i}/{total})"
+        embed.add_field(name=f"​{suffix}", value=f"*{part}*", inline=False)
+
 CATEGORY_ORDER = ["Category", "Text", "Bullet"] + list(CATEGORY_EMOJIS.keys())
 
 # ━━━ helper: update a deployed regular-list dashboard ━━━━━━━━━━━━━━━━━━━━━━━
@@ -64,7 +89,7 @@ def build_embed(list_name: str) -> discord.Embed:
             prefix = CATEGORY_EMOJIS.get(cat, "")
             embed.add_field(name=f"{prefix}   {it['name']}", value="​", inline=False)
             if it.get("comment"):
-                embed.add_field(name="​", value=f"*{it['comment']}*", inline=False)
+    add_chunked_comment_field(embed, it["comment"])
     return embed
 
 @bot.event
@@ -468,29 +493,54 @@ async def deploy_gen_list_cmd(interaction: discord.Interaction, name: str):
 async def help_cmd(interaction: discord.Interaction):
     text = (
         "**Gravity List Bot**\n\n"
+        
         "**Regular Lists**\n"
+        
         "• `/view_lists`, `/deploy_list name:<list>`\n"
+        
         "• `/create_list`, `/delete_list`\n\n"
+        
         "**List Organization**\n"
+        
         "• Categories: `/add_list_category`, `/edit_list_category`, `/remove_list_category`\n"
+        
         "• Plain text: `/add_text`, `/edit_text`, `/remove_text`\n"
+        
         "• Bullets: `/add_bullet`, `/edit_bullet`, `/remove_bullet`\n"
+        
         "• Name entries: `/add_name`, `/remove_name`, `/edit_name`, `/move_name`, `/sort_list`\n"
+        
         "• Assign items: `/assign_to_category`\n\n"
+        
         "**Generator Lists & Timers**\n"
-        "• `/view_gen_lists`\n"
+        
+        "• `/view_gen_lists`, `/deploy_gen_list name:<gen_list>`\n"
+        
         "• `/create_gen_list`, `/delete_gen_list`\n"
-        "• Tek gens: `/add_gen_tek`, `/edit_gen_tek`, `/remove_gen`\n"
-        "• Electrical gens: `/add_gen_electrical`, `/edit_gen_electrical`, `/remove_gen`\n"
-        "• Reorder gens: `/reorder_gen`\n"
-        "• Set ping role: `/set_gen_role`\n\n"
+        
+        "• Tek: `/add_gen_tek`, `/edit_gen_tek`, `/remove_gen`\n"
+        
+        "• Electrical: `/add_gen_electrical`, `/edit_gen_electrical`, `/remove_gen`\n"
+        
+        "• Reorder: `/reorder_gen`\n"
+        
+        "• Set ping role: `/set_gen_role`\n"
+        
+        "• **Mute alerts:** `/mute_gen_alerts list_name:<gen_list> gen_name:<name>`\n"
+        
+        "• **Unmute alerts:** `/unmute_gen_alerts list_name:<gen_list> gen_name:<name>`\n\n"
+        
         "**Standalone Timers**\n"
+        
         "• `/create_timer`, `/pause_timer`, `/resume_timer`, `/edit_timer`, `/delete_timer`\n\n"
+        
         "**Comments**\n"
+        
         "• `/add_comment`, `/edit_comment`, `/remove_comment`\n\n"
+        
         "**Administration**\n"
-        "• `/set_log_channel` (admin only)\n\n"
-        "Full examples in **README.md**."
+        
+        "• `/set_log_channel` (admin only)\n"
     )
     await interaction.response.send_message(text, ephemeral=True)
 
