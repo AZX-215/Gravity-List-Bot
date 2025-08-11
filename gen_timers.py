@@ -289,7 +289,7 @@ def build_gen_embed(list_name: str) -> discord.Embed:
     # Signature + local-time update at the BOTTOM
     embed.add_field(
         name="​",
-        value=f"*built by -AZX*\nUpdated <t:{int(time.time())}:f>",
+        value=f"*Powered by AZX*\nUpdated <t:{int(time.time())}:f>",
         inline=False
     )
 
@@ -566,3 +566,4 @@ async def setup(bot: commands.Bot):
 
 # alias for import compatibility (legacy)
 build_gen_timetable_embed = build_gen_embed
+
