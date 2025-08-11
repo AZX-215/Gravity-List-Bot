@@ -106,7 +106,7 @@ def fmt_remaining(seconds: int) -> str:
 
 # ─── Embed building helpers ────────────────────────────────────────────────────
 def _add_chunked_fields(embed: discord.Embed, lines: list[str], base_name: str = "Generators"):
-    """Split long values so each field value ≤ 1024 chars."""
+    """Split long values so each field value ≤ 1024 chars. Adds a blank line between entries."""
     if not lines:
         embed.add_field(
             name=base_name,
@@ -118,12 +118,13 @@ def _add_chunked_fields(embed: discord.Embed, lines: list[str], base_name: str =
     chunks = []
     current = ""
     for line in lines:
-        extra = len(line) + (1 if current else 0)  # +1 for newline if appending
+        # include two newlines between entries for readability
+        extra = len(line) + (2 if current else 0)
         if len(current) + extra > EMBED_FIELD_VALUE_MAX:
             chunks.append(current)
             current = line
         else:
-            current = f"{current}\n{line}" if current else line
+            current = f"{current}\n\n{line}" if current else line
     if current:
         chunks.append(current)
 
@@ -253,14 +254,9 @@ def build_gen_embed(list_name: str) -> discord.Embed:
     )
     embed.set_thumbnail(url=TEK_THUMBNAIL)
 
-    # Description: role mention (if set), then signature line, then local-time token
-    desc_lines = []
+    # Keep role mention at the top (if set); signature/timestamp go to the bottom.
     role_id = get_gen_list_role(list_name)
-    if role_id:
-        desc_lines.append(f"<@&{role_id}>")
-    desc_lines.append("built by -AZX")
-    desc_lines.append(f"Updated <t:{int(time.time())}:f>")
-    embed.description = "\n".join(desc_lines)
+    embed.description = f"<@&{role_id}>" if role_id else None
 
     lines: list[str] = []
     for item in data:
@@ -268,7 +264,6 @@ def build_gen_embed(list_name: str) -> discord.Embed:
         emoji = GEN_EMOJIS.get(gtype, "⚙️")
         name  = item.get("name", "Unknown")
         muted = bool(item.get("alerts_muted", False))
-        # base name + mute indicator
         name_part = f"{emoji} **{name}**" + (" 🔕" if muted else "")
 
         if gtype == "Tek":
@@ -279,7 +274,6 @@ def build_gen_embed(list_name: str) -> discord.Embed:
                 f"{name_part} — {status} — ⏳ {fmt_remaining(remaining)} — "
                 f"🧩 {rem_shards} shards, 🔷 {rem_elements} element{marker}"
             )
-
         elif gtype == "Electrical":
             remaining, rem_gas, rem_imbued = compute_elec_remaining(item, now)
             status = "🟢 ONLINE" if remaining > 0 else "❌ OFFLINE"
@@ -290,6 +284,14 @@ def build_gen_embed(list_name: str) -> discord.Embed:
             )
 
     _add_chunked_fields(embed, lines, base_name="Generators")
+
+    # Signature + local-time update at the BOTTOM (Discord renders <t:…> in field values)
+    embed.add_field(
+        name="​",
+        value=f"*built by AZX*\nUpdated <t:{int(time.time())}:f>",
+        inline=False
+    )
+
     return embed
 
 # ─── Cog ───────────────────────────────────────────────────────────────────────
