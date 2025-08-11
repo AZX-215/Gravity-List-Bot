@@ -25,8 +25,8 @@ TEK_COLOR       = 0x0099FF
 ELEC_COLOR      = 0xFFC300
 GEN_EMOJIS      = {"Tek": "⚡", "Electrical": "🔌"}
 
-BACKOFF_SECONDS = 10 * 60   # pause updates for 10 minutes on 429
-LOW_THRESHOLD   = 12 * 3600 # 12 hours in seconds
+BACKOFF_SECONDS = 10 * 60   # pause updates for 10 minutes on 429
+LOW_THRESHOLD   = 12 * 3600 # 12 hours in seconds
 
 # ─── Utility: log to a configured channel ───────────────────────────────────────
 async def log_to_channel(bot: commands.Bot, message: str):
@@ -41,14 +41,25 @@ async def log_to_channel(bot: commands.Bot, message: str):
 async def refresh_dashboard(bot: commands.Bot, list_name: str):
     dash = get_gen_dashboard_id(list_name)
     if not dash:
-        return
+        return  # not deployed yet
     ch_id, msg_id = dash
     ch = bot.get_channel(ch_id)
     if not ch:
         return
-    msg = await ch.fetch_message(msg_id)
+
     embed = build_gen_embed(list_name)
-    await msg.edit(embed=embed)
+    try:
+        msg = await ch.fetch_message(msg_id)
+        await msg.edit(embed=embed)
+    except discord.NotFound:
+        # Message was deleted—recreate and save the new ID
+        sent = await ch.send(embed=embed)
+        save_gen_dashboard_id(list_name, ch.id, sent.id)
+        await log_to_channel(bot, f"ℹ️ Recreated missing gen dashboard for `{list_name}` in <#{ch_id}>.")
+    except discord.Forbidden:
+        await log_to_channel(bot, f"❌ Missing permissions to edit gen dashboard for `{list_name}` in <#{ch_id}>.")
+    except discord.HTTPException as e:
+        await log_to_channel(bot, f"⚠️ Failed to update gen dashboard `{list_name}`: {e}")
 
 # ─── Build the embed ───────────────────────────────────────────────────────────
 def build_gen_embed(list_name: str) -> discord.Embed:
@@ -57,96 +68,89 @@ def build_gen_embed(list_name: str) -> discord.Embed:
 
     embed = discord.Embed(
         title=list_name,
-        color=TEK_COLOR,
-        timestamp=datetime.datetime.utcnow()
+        color=TEK_COLOR if any(item.get("type") == "Tek" for item in data) else ELEC_COLOR
     )
     embed.set_thumbnail(url=TEK_THUMBNAIL)
-    embed.set_footer(text="Gravity List Bot • Powered by AZX")
 
-    for idx, item in enumerate(data, start=1):
-        name             = item.get("name")
-        gen_type         = item.get("type")
-        start_ts         = item.get("timestamp", now)
-        elapsed          = now - start_ts
+    lines = []
+    role_id = get_gen_list_role(list_name)
+    if role_id:
+        embed.description = f"<@&{role_id}>"
 
-        # Initial fuel amounts
-        initial_elements = item.get("element", 0)
-        initial_shards   = item.get("shards", 0)
-        shard_duration   = 648      # seconds per shard burn
-        element_duration = 64800    # seconds per element burn
+    for item in data:
+        gtype = item.get("type", "Tek")
+        emoji = GEN_EMOJIS.get(gtype, "⚙️")
+        name  = item.get("name", "Unknown")
+        ts    = item.get("timestamp", now)
+        elapsed = max(now - ts, 0)
 
-        total_shard_time   = initial_shards * shard_duration
-        total_element_time = initial_elements * element_duration
-        total_fuel_time    = total_shard_time + total_element_time
-        remaining_time     = max(total_fuel_time - elapsed, 0)
+        if gtype == "Tek":
+            initial_elements = item.get("element", 0)
+            initial_shards   = item.get("shards", 0)
+            shard_duration   = 648      # seconds per shard burn
+            element_duration = 64800    # seconds per element burn
 
-        # Calculate remaining shards
-        shards_used          = int(min(elapsed, total_shard_time) // shard_duration)
-        rem_shards           = max(initial_shards - shards_used, 0)
+            total_shard_time   = initial_shards * shard_duration
+            total_element_time = initial_elements * element_duration
+            total_fuel_time    = total_shard_time + total_element_time
+            remaining_time     = max(total_fuel_time - elapsed, 0)
 
-        # Then calculate remaining elements after shards
-        elapsed_after_shards = max(elapsed - total_shard_time, 0)
-        elems_used           = int(min(elapsed_after_shards, total_element_time) // element_duration)
-        rem_elements         = max(initial_elements - elems_used, 0)
+            # Calculate remaining shards
+            shards_used          = int(min(elapsed, total_shard_time) // shard_duration)
+            rem_shards           = max(initial_shards - shards_used, 0)
 
-        # Format remaining time
-        days    = int(remaining_time // 86400)
-        hours   = int((remaining_time % 86400) // 3600)
-        minutes = int((remaining_time % 3600) // 60)
-        parts   = []
-        if days:
-            parts.append(f"{days} days")
-        if hours:
-            parts.append(f"{hours} hours")
-        parts.append(f"{minutes} minutes")
-        rem_str = " ".join(parts)
+            # Then calculate remaining elements after shards
+            elapsed_after_shards = max(elapsed - total_shard_time, 0)
+            elems_used           = int(min(elapsed_after_shards, total_element_time) // element_duration)
+            rem_elements         = max(initial_elements - elems_used, 0)
 
-        # Timer icon & status
-        timer_icon   = "⩇⩇:⩇⩇❗" if remaining_time == 0 else "⏱️"
-        status_emoji = "🔴" if remaining_time == 0 else "🟢"
-        status_word  = "Offline" if remaining_time == 0 else "Online"
+            # Format remaining time
+            days    = int(remaining_time // 86400)
+            hours   = int((remaining_time % 86400) // 3600)
+            minutes = int((remaining_time % 3600) // 60)
+            parts   = []
+            if days:
+                parts.append(f"{days} days")
+            if hours:
+                parts.append(f"{hours} hours")
+            parts.append(f"{minutes} minutes")
+            rem_str = " ".join(parts)
 
-        # Fuel info display
-        if gen_type == "Tek":
-            fuel_info  = f"{rem_shards} shards / {rem_elements} element"
-            embed.color = TEK_COLOR
-        else:
-            # Electrical: recalc from item.get("gas") and item.get("imbued")
-            initial_gas     = item.get("gas", 0)
-            initial_imbued  = item.get("imbued", 0)
-            total_gas_time  = initial_gas * 3600
-            total_imb_time  = initial_imbued * 14400
+            # Choose a color indicator if low
+            low = remaining_time <= LOW_THRESHOLD
+            low_marker = " **(LOW)**" if low else ""
 
-            gas_used         = int(min(elapsed, total_gas_time) // 3600)
-            rem_gas          = max(initial_gas - gas_used, 0)
-            elapsed_after_gas = max(elapsed - total_gas_time, 0)
-            imb_used         = int(min(elapsed_after_gas, total_imb_time) // 14400)
-            rem_imbued       = max(initial_imbued - imb_used, 0)
+            line = f"{emoji} **{name}** — ⏳ {rem_str} — 🧩 {rem_shards} shards, 🔷 {rem_elements} element{low_marker}"
+            lines.append(line)
 
-            fuel_info   = f"{rem_gas} gas / {rem_imbued} imbued gas"
-            embed.color = ELEC_COLOR
+        elif gtype == "Electrical":
+            gas     = item.get("gas", 0)
+            imbued  = item.get("imbued", 0)
+            # No timed burn for Electrical here; just display counts
+            line = f"{emoji} **{name}** — ⛽ {gas} gas, ✨ {imbued} imbued"
+            lines.append(line)
 
-        emoji      = GEN_EMOJIS.get(gen_type, "")
-        entry_name = f"{emoji} __{name}__"
-        value_text = (
-            f"{timer_icon} {rem_str} remaining   —   "
-            f"{fuel_info}   —   {status_emoji} {status_word}"
-        )
+    if not lines:
+        lines.append("_No generators yet. Use `/add_gen_tek` or `/add_gen_electrical`._")
 
-        embed.add_field(name=f"{idx}. {entry_name}", value=value_text, inline=False)
+    # Discord embeds max ~6000 chars; keep safe
+    joined = "\n".join(lines)
+    if len(joined) > 5500:
+        joined = joined[:5490] + "\n…"
 
+    embed.add_field(name="Generators", value=joined, inline=False)
+    embed.set_footer(text=f"Updated {datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC")
     return embed
 
-# ─── Generator Cog ─────────────────────────────────────────────────────────────
+# ─── Cog ───────────────────────────────────────────────────────────────────────
 class GeneratorCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
-        self.bot         = bot
-        self.backoff_until = 0
-        self.loop        = self.generator_list_loop
-        self.loop.start()
+        self.bot = bot
+        self.backoff_until = 0.0
+        self.generator_list_loop.start()
 
     def cog_unload(self):
-        self.loop.cancel()
+        self.generator_list_loop.cancel()
 
     @tasks.loop(seconds=90)
     async def generator_list_loop(self):
@@ -178,19 +182,20 @@ class GeneratorCog(commands.Cog):
         )
         await refresh_dashboard(self.bot, name)
 
-    @app_commands.command(name="delete_gen_list", description="Delete an existing generator list")
-    @app_commands.describe(name="Generator list to delete")
+    @app_commands.command(name="delete_gen_list", description="Delete a generator list")
+    @app_commands.describe(name="Name of generator list to delete")
     async def delete_gen_list_cmd(self, interaction: discord.Interaction, name: str):
         if not gen_list_exists(name):
             return await interaction.response.send_message(
-                f"❌ Generator list `{name}` not found.", ephemeral=True
+                f"❌ `{name}` not found.", ephemeral=True
             )
         delete_gen_list(name)
         await interaction.response.send_message(
-            f"✅ Deleted generator list `{name}`.", ephemeral=True
+            f"🗑️ Deleted generator list `{name}`.", ephemeral=True
         )
+        await refresh_dashboard(self.bot, name)
 
-    @app_commands.command(name="add_gen_tek", description="Add a Tek generator entry")
+    @app_commands.command(name="add_gen_tek", description="Add a Tek generator")
     @app_commands.describe(
         list_name="Generator list",
         gen_name="Generator name",
@@ -220,7 +225,7 @@ class GeneratorCog(commands.Cog):
         )
         await refresh_dashboard(self.bot, list_name)
 
-    @app_commands.command(name="add_gen_electrical", description="Add an Electrical generator entry")
+    @app_commands.command(name="add_gen_electrical", description="Add an Electrical generator")
     @app_commands.describe(
         list_name="Generator list",
         gen_name="Generator name",
@@ -278,7 +283,10 @@ class GeneratorCog(commands.Cog):
                 await interaction.response.send_message(
                     f"✅ Updated Tek generator `{gen_name}`.", ephemeral=True
                 )
-                await refresh_dashboard(self.bot, list_name)
+                try:
+                    await refresh_dashboard(self.bot, list_name)
+                except Exception as e:
+                    await log_to_channel(self.bot, f"⚠️ refresh_dashboard failed for `{list_name}` after edit: {e}")
                 return
         await interaction.response.send_message(
             f"❌ Tek generator `{gen_name}` not found.", ephemeral=True
@@ -314,6 +322,7 @@ class GeneratorCog(commands.Cog):
                 )
                 await refresh_dashboard(self.bot, list_name)
                 return
+
         await interaction.response.send_message(
             f"❌ Electrical generator `{gen_name}` not found.", ephemeral=True
         )
@@ -334,51 +343,18 @@ class GeneratorCog(commands.Cog):
                 f"❌ `{list_name}` not found.", ephemeral=True
             )
         data = load_gen_list(list_name)
-        for i, item in enumerate(data):
-            if item.get("name") == gen_name:
-                data.pop(i)
-                save_gen_list(list_name, data)
-                await interaction.response.send_message(
-                    f"✅ Removed generator `{gen_name}`.", ephemeral=True
-                )
-                await refresh_dashboard(self.bot, list_name)
-                return
-        await interaction.response.send_message(
-            f"❌ Generator `{gen_name}` not found.", ephemeral=True
-        )
-
-    @app_commands.command(name="reorder_gen", description="Reorder generator entries by index")
-    @app_commands.describe(
-        list_name="Generator list",
-        from_index="Current position (1-based)",
-        to_index="New position (1-based)"
-    )
-    async def reorder_gen(
-        self,
-        interaction: discord.Interaction,
-        list_name: str,
-        from_index: int,
-        to_index: int
-    ):
-        if not gen_list_exists(list_name):
+        new_data = [i for i in data if i.get("name") != gen_name]
+        if len(new_data) == len(data):
             return await interaction.response.send_message(
-                f"❌ `{list_name}` not found.", ephemeral=True
+                f"❌ Generator `{gen_name}` not found.", ephemeral=True
             )
-        data = load_gen_list(list_name)
-        length = len(data)
-        if not (1 <= from_index <= length and 1 <= to_index <= length):
-            return await interaction.response.send_message(
-                f"❌ Invalid indices. Must be between 1 and {length}.", ephemeral=True
-            )
-        item = data.pop(from_index - 1)
-        data.insert(to_index - 1, item)
-        save_gen_list(list_name, data)
+        save_gen_list(list_name, new_data)
         await interaction.response.send_message(
-            f"✅ Moved generator from position {from_index} → {to_index}.", ephemeral=True
+            f"🗑️ Removed `{gen_name}`.", ephemeral=True
         )
         await refresh_dashboard(self.bot, list_name)
 
-    @app_commands.command(name="set_gen_role", description="Set a ping role for a gen list")
+    @app_commands.command(name="set_gen_role", description="Set a role to ping when low or expiring soon")
     @app_commands.describe(
         list_name="Generator list",
         role="Role to ping on low fuel/expiry"
