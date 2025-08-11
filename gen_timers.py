@@ -1,6 +1,5 @@
 import os
 import time
-import datetime
 import discord
 from discord.ext import commands, tasks
 from discord import app_commands
@@ -43,16 +42,19 @@ async def log_to_channel(bot: commands.Bot, message: str):
         except Exception:
             pass
 
-# ─── Tek fuel math helpers ─────────────────────────────────────────────────────
+# ─── Burn durations ────────────────────────────────────────────────────────────
+# Tek
 SHARD_DURATION   = 648      # seconds per shard burn
 ELEMENT_DURATION = 64800    # seconds per element burn
+# Electrical
+GAS_DURATION     = 3600     # seconds per gas burn (1h)
+IMBUED_DURATION  = 14400    # seconds per imbued gas burn (4h)
 
+# ─── Remaining fuel calculators ────────────────────────────────────────────────
 def compute_tek_remaining(item: dict, now: float) -> tuple[int, int, int]:
-    """Return (remaining_time_secs, rem_shards, rem_elements) for a Tek gen item."""
     initial_elements = int(item.get("element", 0))
     initial_shards   = int(item.get("shards", 0))
     ts               = float(item.get("timestamp", now))
-
     elapsed = max(now - ts, 0)
 
     total_shard_time   = initial_shards * SHARD_DURATION
@@ -60,16 +62,34 @@ def compute_tek_remaining(item: dict, now: float) -> tuple[int, int, int]:
     total_fuel_time    = total_shard_time + total_element_time
     remaining_time     = max(total_fuel_time - elapsed, 0)
 
-    # Remaining shards
     shards_used  = int(min(elapsed, total_shard_time) // SHARD_DURATION)
     rem_shards   = max(initial_shards - shards_used, 0)
 
-    # Remaining elements (after shards)
     elapsed_after_shards = max(elapsed - total_shard_time, 0)
     elems_used           = int(min(elapsed_after_shards, total_element_time) // ELEMENT_DURATION)
     rem_elements         = max(initial_elements - elems_used, 0)
 
     return int(remaining_time), int(rem_shards), int(rem_elements)
+
+def compute_elec_remaining(item: dict, now: float) -> tuple[int, int, int]:
+    initial_gas    = int(item.get("gas", 0))
+    initial_imbued = int(item.get("imbued", 0))
+    ts             = float(item.get("timestamp", now))
+    elapsed = max(now - ts, 0)
+
+    total_gas_time    = initial_gas * GAS_DURATION
+    total_imbued_time = initial_imbued * IMBUED_DURATION
+    total_fuel_time   = total_gas_time + total_imbued_time
+    remaining_time    = max(total_fuel_time - elapsed, 0)
+
+    gas_used   = int(min(elapsed, total_gas_time) // GAS_DURATION)
+    rem_gas    = max(initial_gas - gas_used, 0)
+
+    elapsed_after_gas = max(elapsed - total_gas_time, 0)
+    imbued_used       = int(min(elapsed_after_gas, total_imbued_time) // IMBUED_DURATION)
+    rem_imbued        = max(initial_imbued - imbued_used, 0)
+
+    return int(remaining_time), int(rem_gas), int(rem_imbued)
 
 def fmt_remaining(seconds: int) -> str:
     days    = seconds // 86400
@@ -90,14 +110,17 @@ def _add_chunked_fields(embed: discord.Embed, lines: list[str], base_name: str =
     This splits the combined lines into multiple fields under that limit.
     """
     if not lines:
-        embed.add_field(name=base_name, value="_No generators yet. Use `/add_gen_tek` or `/add_gen_electrical`._", inline=False)
+        embed.add_field(
+            name=base_name,
+            value="_No generators yet. Use `/add_gen_tek` or `/add_gen_electrical`._",
+            inline=False
+        )
         return
 
     chunks = []
     current = ""
     for line in lines:
-        # +1 for the newline if we add it
-        extra = len(line) + (1 if current else 0)
+        extra = len(line) + (1 if current else 0)  # +1 for newline if appending
         if len(current) + extra > EMBED_FIELD_VALUE_MAX:
             chunks.append(current)
             current = line
@@ -137,10 +160,10 @@ async def refresh_dashboard(bot: commands.Bot, list_name: str):
     except discord.HTTPException as e:
         await log_to_channel(bot, f"⚠️ Failed to update gen dashboard `{list_name}`: {e}")
 
-# ─── Automatic pings (low / empty) ─────────────────────────────────────────────
+# ─── Automatic pings (LOW / EMPTY) for both Tek & Electrical ───────────────────
 async def evaluate_and_ping(bot: commands.Bot, list_name: str):
-    """Check Tek gens for low/empty thresholds and ping the configured role once.
-    Adds boolean flags on items: alerted_low, alerted_empty. Flags auto-reset when refueled.
+    """Ping the configured role when a gen first goes LOW (≤12h) or EMPTY (0).
+    Flags (alerted_low/alerted_empty) auto-reset when refueled.
     """
     data = load_gen_list(list_name)
     if not data:
@@ -163,12 +186,16 @@ async def evaluate_and_ping(bot: commands.Bot, list_name: str):
     changed = False
 
     for item in data:
-        if item.get("type") != "Tek":
+        gtype = item.get("type")
+        if gtype == "Tek":
+            remaining, rem_a, rem_b = compute_tek_remaining(item, now)  # a=shards, b=element
+            a_label, b_label, emoji = "shards", "element", GEN_EMOJIS["Tek"]
+        elif gtype == "Electrical":
+            remaining, rem_a, rem_b = compute_elec_remaining(item, now)  # a=gas, b=imbued
+            a_label, b_label, emoji = "gas", "imbued", GEN_EMOJIS["Electrical"]
+        else:
             continue
 
-        remaining, rem_shards, rem_elements = compute_tek_remaining(item, now)
-
-        # Initialize flags if missing
         alerted_low   = bool(item.get("alerted_low", False))
         alerted_empty = bool(item.get("alerted_empty", False))
 
@@ -182,30 +209,31 @@ async def evaluate_and_ping(bot: commands.Bot, list_name: str):
             alerted_empty = False
             changed = True
 
-        emoji = GEN_EMOJIS.get("Tek", "⚡")
-        name  = item.get("name", "Unknown")
+        name = item.get("name", "Unknown")
 
-        # Empty ping (highest priority)
+        # EMPTY ping (highest priority)
         if remaining == 0 and not alerted_empty:
             try:
-                await channel.send(f"<@&{role_id}> {emoji} **{name}** has **run out of fuel** (0 shards, 0 element).")
+                await channel.send(
+                    f"<@&{role_id}> {emoji} **{name}** has **run out of fuel** (0 {a_label}, 0 {b_label})."
+                )
                 item["alerted_empty"] = True
                 changed = True
             except Exception:
                 pass
-            # If empty we also consider low satisfied implicitly
+            # Mark low as satisfied too
             if not item.get("alerted_low", False):
                 item["alerted_low"] = True
                 changed = True
             continue
 
-        # Low ping
+        # LOW ping
         if 0 < remaining <= LOW_THRESHOLD and not alerted_low:
             rem_str = fmt_remaining(remaining)
             try:
                 await channel.send(
                     f"<@&{role_id}> {emoji} **{name}** is **low on fuel** — {rem_str} left "
-                    f"(🧩 {rem_shards} shards, 🔷 {rem_elements} element)."
+                    f"({rem_a} {a_label}, {rem_b} {b_label} remaining)."
                 )
                 item["alerted_low"] = True
                 changed = True
@@ -238,26 +266,25 @@ def build_gen_embed(list_name: str) -> discord.Embed:
 
         if gtype == "Tek":
             remaining, rem_shards, rem_elements = compute_tek_remaining(item, now)
-            rem_str = fmt_remaining(remaining)
-            if remaining == 0:
-                marker = " **(EMPTY)**"
-            elif remaining <= LOW_THRESHOLD:
-                marker = " **(LOW)**"
-            else:
-                marker = ""
-            line = f"{emoji} **{name}** — ⏳ {rem_str} — 🧩 {rem_shards} shards, 🔷 {rem_elements} element{marker}"
-            lines.append(line)
+            marker = " **(EMPTY)**" if remaining == 0 else (" **(LOW)**" if remaining <= LOW_THRESHOLD else "")
+            lines.append(
+                f"{emoji} **{name}** — ⏳ {fmt_remaining(remaining)} — "
+                f"🧩 {rem_shards} shards, 🔷 {rem_elements} element{marker}"
+            )
 
         elif gtype == "Electrical":
-            gas     = int(item.get("gas", 0))
-            imbued  = int(item.get("imbued", 0))
-            line = f"{emoji} **{name}** — ⛽ {gas} gas, ✨ {imbued} imbued"
-            lines.append(line)
+            remaining, rem_gas, rem_imbued = compute_elec_remaining(item, now)
+            marker = " **(EMPTY)**" if remaining == 0 else (" **(LOW)**" if remaining <= LOW_THRESHOLD else "")
+            lines.append(
+                f"{emoji} **{name}** — ⏳ {fmt_remaining(remaining)} — "
+                f"⛽ {rem_gas} gas, ✨ {rem_imbued} imbued{marker}"
+            )
 
-    # Add as chunked fields to respect 1024/field limit
+    # Chunk long content across multiple fields (1024 char per field)
     _add_chunked_fields(embed, lines, base_name="Generators")
 
-    embed.set_footer(text=f"Updated {datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC")
+    # Footer shows each viewer's local time + signature
+    embed.set_footer(text=f"Updated <t:{int(time.time())}:f> • built by -AZX")
     return embed
 
 # ─── Cog ───────────────────────────────────────────────────────────────────────
@@ -279,10 +306,8 @@ class GeneratorCog(commands.Cog):
 
         for name in get_all_gen_list_names():
             try:
-                # Self-heal/update the embed
-                await refresh_dashboard(self.bot, name)
-                # Evaluate automatic pings
-                await evaluate_and_ping(self.bot, name)
+                await refresh_dashboard(self.bot, name)   # self-heal + update
+                await evaluate_and_ping(self.bot, name)   # alerts
 
             except discord.HTTPException as e:
                 if getattr(e, 'status', None) == 429:
@@ -292,7 +317,6 @@ class GeneratorCog(commands.Cog):
                         f"⚠️ Rate limit hit on `{name}`, pausing for {BACKOFF_SECONDS//60}m."
                     )
             except Exception as e:
-                # Don’t kill the loop on a single list failure
                 await log_to_channel(self.bot, f"⚠️ generator_list_loop error on `{name}`: {e}")
 
     @app_commands.command(name="create_gen_list", description="Create a new generator list")
@@ -405,7 +429,8 @@ class GeneratorCog(commands.Cog):
             if item.get("name") == gen_name and item.get("type") == "Tek":
                 item["element"] = int(element)
                 item["shards"]  = int(shards)
-                # Reset alert flags on manual edit (refuel/adjustment)
+                item["timestamp"] = time.time()  # reset timer on edit (fresh refuel)
+                # Reset alert flags on manual edit
                 item["alerted_low"] = False
                 item["alerted_empty"] = False
                 save_gen_list(list_name, data)
@@ -443,8 +468,12 @@ class GeneratorCog(commands.Cog):
         data = load_gen_list(list_name)
         for item in data:
             if item.get("name") == gen_name and item.get("type") == "Electrical":
-                item["gas"]    = int(gas)
-                item["imbued"] = int(imbued)
+                item["gas"]     = int(gas)
+                item["imbued"]  = int(imbued)
+                item["timestamp"] = time.time()  # reset timer on edit (fresh refuel)
+                # Reset alert flags on manual edit
+                item["alerted_low"] = False
+                item["alerted_empty"] = False
                 save_gen_list(list_name, data)
                 await interaction.response.send_message(
                     f"✅ Updated Electrical generator `{gen_name}`.", ephemeral=True
@@ -483,6 +512,36 @@ class GeneratorCog(commands.Cog):
         )
         await refresh_dashboard(self.bot, list_name)
 
+    @app_commands.command(name="reorder_gen", description="Reorder generator entries by index")
+    @app_commands.describe(
+        list_name="Generator list",
+        from_index="Current position (1-based)",
+        to_index="New position (1-based)"
+    )
+    async def reorder_gen(
+        self,
+        interaction: discord.Interaction,
+        list_name: str,
+        from_index: int,
+        to_index: int
+    ):
+        if not gen_list_exists(list_name):
+            return await interaction.response.send_message(
+                f"❌ `{list_name}` not found.", ephemeral=True
+            )
+        data = load_gen_list(list_name)
+        if not (1 <= from_index <= len(data)) or not (1 <= to_index <= len(data)):
+            return await interaction.response.send_message(
+                "❌ Index out of range.", ephemeral=True
+            )
+        item = data.pop(from_index - 1)
+        data.insert(to_index - 1, item)
+        save_gen_list(list_name, data)
+        await interaction.response.send_message(
+            f"✅ Moved `{item.get('name','?')}` from {from_index} → {to_index}.", ephemeral=True
+        )
+        await refresh_dashboard(self.bot, list_name)
+
     @app_commands.command(name="set_gen_role", description="Set a role to ping when low or expiring soon")
     @app_commands.describe(
         list_name="Generator list",
@@ -503,7 +562,7 @@ class GeneratorCog(commands.Cog):
             f"✅ Ping role set for `{list_name}`.", ephemeral=True
         )
 
-# ─── Cog setup for bot.py ─────────────────────────────────────────────────────────
+# ─── Cog setup for bot.py ──────────────────────────────────────────────────────
 async def setup_gen_timers(bot: commands.Bot):
     try:
         await bot.add_cog(GeneratorCog(bot))
