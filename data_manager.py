@@ -1,216 +1,297 @@
 import os
 import json
-import hashlib
 import time
+from typing import Any, Dict, List, Optional, Tuple
 
-# Paths
-DATABASE_PATH       = os.getenv("DATABASE_PATH", "./lists/data.json")
-DASHBOARDS_PATH     = os.getenv("DASHBOARDS_PATH") or os.path.join(os.path.dirname(DATABASE_PATH), "dashboards.json")
-GEN_LISTS_DIR       = os.path.join(os.path.dirname(DATABASE_PATH), "generator_lists")
-GEN_DASHBOARDS_PATH = os.getenv("GEN_DASHBOARDS_PATH") or os.path.join(os.path.dirname(DATABASE_PATH), "generator_dashboards.json")
-TIMERS_PATH         = os.path.join(os.path.dirname(DATABASE_PATH), "timers.json")
+# ───────────────────────────── Storage paths ─────────────────────────────
+# You can override these with environment variables if needed.
+BASE_DATA = os.getenv("DATABASE_PATH", "./lists/data.json")
+BASE_DIR  = os.path.dirname(BASE_DATA) or "."
 
-def _ensure_dir(path):
-    base = os.path.dirname(path)
+LISTS_DIR            = os.path.join(BASE_DIR, "lists")                     # each regular list stored as its own JSON
+DASHBOARDS_PATH      = os.getenv("DASHBOARDS_PATH")      or os.path.join(BASE_DIR, "dashboards.json")
+
+GEN_LISTS_DIR        = os.path.join(BASE_DIR, "generator_lists")           # each gen list stored as its own JSON
+GEN_DASHBOARDS_PATH  = os.getenv("GEN_DASHBOARDS_PATH")  or os.path.join(BASE_DIR, "generator_dashboards.json")
+
+TIMERS_PATH          = os.path.join(BASE_DIR, "timers.json")               # standalone timers data
+
+
+# ───────────────────────────── I/O helpers ──────────────────────────────
+def _ensure_dir(path: str) -> None:
+    """Ensure parent directory exists for a file path, or the directory itself."""
+    base = path if os.path.isdir(path) else os.path.dirname(path)
     if base and not os.path.exists(base):
         os.makedirs(base, exist_ok=True)
 
-
-# ━━━ Standard Lists ━━━━━━━━━━━━━━━━━━━━
-
-def _get_list_path(list_name):
-    _ensure_dir(DATABASE_PATH)
-    base = os.path.dirname(DATABASE_PATH)
-    return os.path.join(base, f"{list_name}.json")
-
-def save_list(list_name, data):
-    path = _get_list_path(list_name)
-    with open(path, "w") as f:
-        json.dump(data, f, indent=2)
-
-def load_list(list_name):
-    path = _get_list_path(list_name)
-    if os.path.exists(path):
-        with open(path, "r") as f:
+def _safe_read_json(path: str, default: Any) -> Any:
+    try:
+        if not os.path.exists(path):
+            return default
+        with open(path, "r", encoding="utf-8") as f:
             return json.load(f)
-    return []
+    except Exception:
+        return default
 
-def delete_list(list_name):
-    path = _get_list_path(list_name)
-    if os.path.exists(path):
-        os.remove(path)
+def _safe_write_json(path: str, data: Any) -> None:
+    _ensure_dir(path)
+    tmp = f"{path}.tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
+    os.replace(tmp, path)
 
-def list_exists(list_name):
-    return os.path.exists(_get_list_path(list_name))
 
-def get_all_list_names():
-    """
-    Return only the JSON files that represent your lists,
-    skipping reserved files like data.json, dashboards.json, timers.json.
-    """
-    _ensure_dir(DATABASE_PATH)
-    base = os.path.dirname(DATABASE_PATH)
-    reserved = {
-        os.path.basename(DATABASE_PATH),
-        os.path.basename(DASHBOARDS_PATH),
-        os.path.basename(TIMERS_PATH),
-    }
-    names = []
-    for fname in os.listdir(base):
-        if not fname.endswith(".json"):
-            continue
-        if fname in reserved:
-            continue
-        names.append(fname[:-5])
+# ───────────────────────── Regular lists (non-gen) ──────────────────────
+def list_path(name: str) -> str:
+    return os.path.join(LISTS_DIR, f"{name}.json")
+
+def list_exists(name: str) -> bool:
+    return os.path.exists(list_path(name))
+
+def load_list(name: str) -> List[Dict[str, Any]]:
+    return _safe_read_json(list_path(name), default=[])
+
+def save_list(name: str, data: List[Dict[str, Any]]) -> None:
+    _safe_write_json(list_path(name), data)
+
+def delete_list(name: str) -> None:
+    p = list_path(name)
+    if os.path.exists(p):
+        os.remove(p)
+
+def get_all_list_names() -> List[str]:
+    _ensure_dir(LISTS_DIR)
+    names: List[str] = []
+    for fname in os.listdir(LISTS_DIR):
+        if fname.endswith(".json"):
+            names.append(fname[:-5])
     return sorted(names)
 
-
-# ━━━ Dashboards ━━━━━━━━━━━━━━━━━━━━━━━
-
-def _load_dashboards():
-    _ensure_dir(DASHBOARDS_PATH)
-    if os.path.exists(DASHBOARDS_PATH):
-        with open(DASHBOARDS_PATH, "r") as f:
-            return json.load(f)
-    return {}
-
-def _save_dashboards(data):
-    _ensure_dir(DASHBOARDS_PATH)
-    with open(DASHBOARDS_PATH, "w") as f:
-        json.dump(data, f, indent=2)
-
-def save_dashboard_id(list_name, channel_id, message_id):
-    data = _load_dashboards()
-    data[list_name] = {"channel_id": channel_id, "message_id": message_id}
-    _save_dashboards(data)
-
-def get_dashboard_id(list_name):
-    data = _load_dashboards()
-    dash = data.get(list_name)
-    return (dash["channel_id"], dash["message_id"]) if dash else None
-
-def get_all_dashboards():
-    return _load_dashboards()
-
-
-# ━━━ Generator Lists ━━━━━━━━━━━━━━━━━━
-
-def _get_gen_list_path(list_name):
-    os.makedirs(GEN_LISTS_DIR, exist_ok=True)
-    return os.path.join(GEN_LISTS_DIR, f"{list_name}.json")
-
-def save_gen_list(list_name, data):
-    path = _get_gen_list_path(list_name)
-    with open(path, "w") as f:
-        json.dump(data, f, indent=2)
-
-def load_gen_list(list_name):
-    path = _get_gen_list_path(list_name)
-    if os.path.exists(path):
-        with open(path, "r") as f:
-            return json.load(f)
-    return []
-
-def delete_gen_list(list_name):
-    path = _get_gen_list_path(list_name)
-    if os.path.exists(path):
-        os.remove(path)
-
-def gen_list_exists(list_name):
-    return os.path.exists(_get_gen_list_path(list_name))
-
-def get_all_gen_list_names():
-    os.makedirs(GEN_LISTS_DIR, exist_ok=True)
-    return sorted([f[:-5] for f in os.listdir(GEN_LISTS_DIR) if f.endswith(".json")])
-
-def add_to_gen_list(list_name, entry_name, gen_type, element, shards, gas, imbued):
-    data = load_gen_list(list_name)
-    data.append({
-        "name": entry_name,
-        "type": gen_type,
-        "element": element,
-        "shards": shards,
-        "gas": gas,
-        "imbued": imbued,
-        "timestamp": time.time()
-    })
-    save_gen_list(list_name, data)
-
-
-# ━━━ Generator List Role Support ━━━━━━━━━━━━━━━━
-
-def set_gen_list_role(list_name, role_id):
-    path = _get_gen_list_path(list_name)
-    meta_path = path + ".meta"
-    meta = {"role_id": role_id}
-    with open(meta_path, "w") as f:
-        json.dump(meta, f)
-
-def get_gen_list_role(list_name):
-    path = _get_gen_list_path(list_name) + ".meta"
-    if os.path.exists(path):
-        with open(path, "r") as f:
-            return json.load(f).get("role_id")
+# Regular list dashboards
+def get_dashboard_id(list_name: str) -> Optional[Tuple[int, int]]:
+    data = _safe_read_json(DASHBOARDS_PATH, default={})
+    v = data.get(list_name)
+    if isinstance(v, list) and len(v) == 2:
+        try:
+            return int(v[0]), int(v[1])
+        except Exception:
+            return None
     return None
 
-
-# ━━━ Generator Dashboards ━━━━━━━━━━━━
-
-def _load_gen_dashboards():
-    os.makedirs(os.path.dirname(GEN_DASHBOARDS_PATH), exist_ok=True)
-    if os.path.exists(GEN_DASHBOARDS_PATH):
-        with open(GEN_DASHBOARDS_PATH, "r") as f:
-            return json.load(f)
-    return {}
-
-def _save_gen_dashboards(data):
-    os.makedirs(os.path.dirname(GEN_DASHBOARDS_PATH), exist_ok=True)
-    with open(GEN_DASHBOARDS_PATH, "w") as f:
-        json.dump(data, f, indent=2)
-
-def save_gen_dashboard_id(list_name, channel_id, message_id):
-    data = _load_gen_dashboards()
-    data[list_name] = {"channel_id": channel_id, "message_id": message_id}
-    _save_gen_dashboards(data)
-
-def get_gen_dashboard_id(list_name):
-    data = _load_gen_dashboards()
-    dash = data.get(list_name)
-    return (dash["channel_id"], dash["message_id"]) if dash else None
-
-def get_all_gen_dashboards():
-    return _load_gen_dashboards()
+def save_dashboard_id(list_name: str, channel_id: int, message_id: int) -> None:
+    data = _safe_read_json(DASHBOARDS_PATH, default={})
+    data[list_name] = [int(channel_id), int(message_id)]
+    _safe_write_json(DASHBOARDS_PATH, data)
 
 
-# ━━━ Hash Helpers ━━━━━━━━━━━━━━━━━━━━━
+# ───────────────────────────── Generator lists ──────────────────────────
+def gen_path(name: str) -> str:
+    return os.path.join(GEN_LISTS_DIR, f"{name}.json")
 
-def get_list_hash(list_name):
-    return hashlib.md5(json.dumps(load_list(list_name), sort_keys=True).encode()).hexdigest()
+def gen_list_exists(name: str) -> bool:
+    return os.path.exists(gen_path(name))
 
-def get_gen_list_hash(list_name):
-    return hashlib.md5(json.dumps(load_gen_list(list_name), sort_keys=True).encode()).hexdigest()
+def _default_gen_doc() -> Dict[str, Any]:
+    # Schema: { "role_id": Optional[int], "items": [ { ... per-gen ... } ] }
+    return {"role_id": None, "items": []}
+
+def _load_gen_doc(name: str) -> Dict[str, Any]:
+    doc = _safe_read_json(gen_path(name), default=_default_gen_doc())
+    # Normalize / migrate items so older files pick up new fields
+    changed = _normalize_gen_items(doc)
+    if changed:
+        _safe_write_json(gen_path(name), doc)
+    return doc
+
+def _save_gen_doc(name: str, doc: Dict[str, Any]) -> None:
+    _safe_write_json(gen_path(name), doc)
+
+def _normalize_gen_items(doc: Dict[str, Any]) -> bool:
+    """Ensure all items have the latest schema keys. Returns True if doc was changed."""
+    items = doc.get("items", [])
+    changed = False
+    for item in items:
+        # required keys with defaults
+        if "type" not in item:            item["type"] = "Tek"; changed = True
+        if "name" not in item:            item["name"] = "Unknown"; changed = True
+
+        # Tek fields
+        if "element" not in item:         item["element"] = 0; changed = True
+        if "shards" not in item:          item["shards"] = 0; changed = True
+
+        # Electrical fields
+        if "gas" not in item:             item["gas"] = 0; changed = True
+        if "imbued" not in item:          item["imbued"] = 0; changed = True
+
+        # timing / alerts
+        if "timestamp" not in item:       item["timestamp"] = time.time(); changed = True
+        if "alerted_low" not in item:     item["alerted_low"] = False; changed = True
+        if "alerted_empty" not in item:   item["alerted_empty"] = False; changed = True
+
+        # NEW: optional metadata
+        if "notes" not in item:           item["notes"] = ""; changed = True
+        if "alerts_muted" not in item:    item["alerts_muted"] = False; changed = True
+
+    if not isinstance(doc.get("role_id", None), (int, type(None))):
+        doc["role_id"] = None
+        changed = True
+
+    doc["items"] = items
+    return changed
+
+def load_gen_list(name: str) -> List[Dict[str, Any]]:
+    doc = _load_gen_doc(name)
+    return doc.get("items", [])
+
+def save_gen_list(name: str, items: List[Dict[str, Any]]) -> None:
+    doc = _load_gen_doc(name)
+    doc["items"] = items
+    _save_gen_doc(name, doc)
+
+def delete_gen_list(name: str) -> None:
+    # Remove the list file
+    p = gen_path(name)
+    if os.path.exists(p):
+        os.remove(p)
+    # Clean up any stored dashboard mapping
+    data = _safe_read_json(GEN_DASHBOARDS_PATH, default={})
+    if name in data:
+        del data[name]
+        _safe_write_json(GEN_DASHBOARDS_PATH, data)
+
+def get_all_gen_list_names() -> List[str]:
+    _ensure_dir(GEN_LISTS_DIR)
+    names: List[str] = []
+    for fname in os.listdir(GEN_LISTS_DIR):
+        if fname.endswith(".json"):
+            names.append(fname[:-5])
+    return sorted(names)
+
+def add_to_gen_list(list_name: str, gen_name: str, gtype: str,
+                    element: int, shards: int, gas: int, imbued: int) -> None:
+    """
+    Add a generator entry to a list, initializing timestamp and alert flags.
+    - Tek: uses 'element' and 'shards'
+    - Electrical: uses 'gas' and 'imbued'
+    """
+    doc = _load_gen_doc(list_name)
+    items = doc.get("items", [])
+    now = time.time()
+
+    if gtype == "Tek":
+        item = {
+            "name": gen_name,
+            "type": "Tek",
+            "element": int(element),
+            "shards": int(shards),
+            "gas": 0,
+            "imbued": 0,
+            "timestamp": now,
+            "alerted_low": False,
+            "alerted_empty": False,
+            "alerts_muted": False,   # NEW
+            "notes": "",             # NEW
+        }
+    else:
+        item = {
+            "name": gen_name,
+            "type": "Electrical",
+            "element": 0,
+            "shards": 0,
+            "gas": int(gas),
+            "imbued": int(imbued),
+            "timestamp": now,
+            "alerted_low": False,
+            "alerted_empty": False,
+            "alerts_muted": False,   # NEW
+            "notes": "",             # NEW
+        }
+
+    items.append(item)
+    doc["items"] = items
+    _save_gen_doc(list_name, doc)
+
+def set_gen_list_role(list_name: str, role_id: int) -> None:
+    doc = _load_gen_doc(list_name)
+    doc["role_id"] = int(role_id)
+    _save_gen_doc(list_name, doc)
+
+def get_gen_list_role(list_name: str) -> Optional[int]:
+    doc = _load_gen_doc(list_name)
+    rid = doc.get("role_id")
+    try:
+        return int(rid) if rid is not None else None
+    except Exception:
+        return None
+
+# Generator dashboards (message/channel mapping for gen dashboards)
+def get_gen_dashboard_id(list_name: str) -> Optional[Tuple[int, int]]:
+    data = _safe_read_json(GEN_DASHBOARDS_PATH, default={})
+    v = data.get(list_name)
+    if isinstance(v, list) and len(v) == 2:
+        try:
+            return int(v[0]), int(v[1])
+        except Exception:
+            return None
+    return None
+
+def save_gen_dashboard_id(list_name: str, channel_id: int, message_id: int) -> None:
+    data = _safe_read_json(GEN_DASHBOARDS_PATH, default={})
+    data[list_name] = [int(channel_id), int(message_id)]
+    _safe_write_json(GEN_DASHBOARDS_PATH, data)
+
+# ─────────────────────────── Per-item helpers (NEW) ────────────────────────────
+def _find_gen_item(doc: Dict[str, Any], gen_name: str) -> Tuple[Optional[int], Optional[Dict[str, Any]]]:
+    items = doc.get("items", [])
+    for idx, it in enumerate(items):
+        if it.get("name", "").lower() == gen_name.lower():
+            return idx, it
+    return None, None
+
+def get_gen_item_notes(list_name: str, gen_name: str) -> Optional[str]:
+    doc = _load_gen_doc(list_name)
+    _, it = _find_gen_item(doc, gen_name)
+    return None if it is None else it.get("notes", "")
+
+def set_gen_item_notes(list_name: str, gen_name: str, notes: str) -> bool:
+    doc = _load_gen_doc(list_name)
+    idx, it = _find_gen_item(doc, gen_name)
+    if it is None:
+        return False
+    it["notes"] = str(notes)
+    doc["items"][idx] = it
+    _save_gen_doc(list_name, doc)
+    return True
+
+def get_gen_item_alerts_muted(list_name: str, gen_name: str) -> Optional[bool]:
+    doc = _load_gen_doc(list_name)
+    _, it = _find_gen_item(doc, gen_name)
+    return None if it is None else bool(it.get("alerts_muted", False))
+
+def set_gen_item_alerts_muted(list_name: str, gen_name: str, muted: bool) -> bool:
+    doc = _load_gen_doc(list_name)
+    idx, it = _find_gen_item(doc, gen_name)
+    if it is None:
+        return False
+    it["alerts_muted"] = bool(muted)
+    doc["items"][idx] = it
+    _save_gen_doc(list_name, doc)
+    return True
 
 
-# ━━━ Timer Persistence ━━━━━━━━━━━━━━━━━━━━
+# ─────────────────────────────── Timers API ─────────────────────────────
+def load_timers() -> Dict[str, Any]:
+    return _safe_read_json(TIMERS_PATH, default={})
 
-def load_timers():
-    _ensure_dir(TIMERS_PATH)
-    if os.path.exists(TIMERS_PATH):
-        with open(TIMERS_PATH, "r") as f:
-            return json.load(f)
-    return {}
+def save_timers(data: Dict[str, Any]) -> None:
+    _safe_write_json(TIMERS_PATH, data)
 
-def save_timers(data):
-    _ensure_dir(TIMERS_PATH)
-    with open(TIMERS_PATH, "w") as f:
-        json.dump(data, f, indent=2)
-
-def add_timer(timer_id, timer_data):
+def add_timer(timer_id: str, timer_data: Dict[str, Any]) -> None:
     timers = load_timers()
     timers[timer_id] = timer_data
     save_timers(timers)
 
-def remove_timer(timer_id):
+def remove_timer(timer_id: str) -> None:
     timers = load_timers()
     if timer_id in timers:
         del timers[timer_id]
