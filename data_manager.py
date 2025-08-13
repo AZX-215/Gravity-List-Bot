@@ -4,7 +4,7 @@ import time
 from typing import Any, Dict, List, Optional, Tuple
 
 # ───────────────────────────── Storage paths ─────────────────────────────
-BASE_DATA = os.getenv("DATABASE_PATH", "./lists/data.json")
+BASE_DATA = os.getenv("DATABASE_PATH", "./data.json")
 BASE_DIR  = os.path.dirname(BASE_DATA) or "."
 
 LISTS_DIR            = os.path.join(BASE_DIR, "lists")
@@ -17,9 +17,13 @@ TIMERS_PATH          = os.path.join(BASE_DIR, "timers.json")
 
 # ───────────────────────────── I/O helpers ──────────────────────────────
 def _ensure_dir(path: str) -> None:
-    base = path if os.path.isdir(path) else os.path.dirname(path)
-    if base and not os.path.exists(base):
-        os.makedirs(base, exist_ok=True)
+    # If 'path' looks like a file (has an extension), create its parent;
+    # otherwise create the directory itself.
+    is_file = os.path.splitext(path)[1] != ""
+    directory = (os.path.dirname(path) or ".") if is_file else path
+    if not os.path.exists(directory):
+        os.makedirs(directory, exist_ok=True)
+
 
 def _safe_read_json(path: str, default: Any) -> Any:
     try:
