@@ -15,15 +15,56 @@ GEN_DASHBOARDS_PATH  = os.getenv("GEN_DASHBOARDS_PATH")  or os.path.join(BASE_DI
 
 TIMERS_PATH          = os.path.join(BASE_DIR, "timers.json")
 
+# --- One-time migration from old nested layout (safe & idempotent) ---
+def _migrate_old_layout() -> None:
+    try:
+        old_base = os.path.join(BASE_DIR, "lists")  # when BASE_DATA defaulted to ./lists/data.json
+        # Move nested regular lists: lists/lists/*.json -> ./lists/*.json
+        old_nested = os.path.join(old_base, "lists")
+        if os.path.isdir(old_nested):
+            os.makedirs(LISTS_DIR, exist_ok=True)
+            for fn in os.listdir(old_nested):
+                if fn.endswith(".json"):
+                    src = os.path.join(old_nested, fn)
+                    dst = os.path.join(LISTS_DIR, fn)
+                    if not os.path.exists(dst):
+                        os.replace(src, dst)
+
+        # Move generator lists: lists/generator_lists/*.json -> ./generator_lists/*.json
+        old_gen = os.path.join(old_base, "generator_lists")
+        if os.path.isdir(old_gen):
+            os.makedirs(GEN_LISTS_DIR, exist_ok=True)
+            for fn in os.listdir(old_gen):
+                if fn.endswith(".json"):
+                    src = os.path.join(old_gen, fn)
+                    dst = os.path.join(GEN_LISTS_DIR, fn)
+                    if not os.path.exists(dst):
+                        os.replace(src, dst)
+
+        # Move dashboards/timers written under the old base
+        for src, dst in [
+            (os.path.join(old_base, "dashboards.json"), DASHBOARDS_PATH),
+            (os.path.join(old_base, "generator_dashboards.json"), GEN_DASHBOARDS_PATH),
+            (os.path.join(old_base, "timers.json"), TIMERS_PATH),
+        ]:
+            if os.path.isfile(src) and not os.path.exists(dst):
+                _ensure_dir(dst)
+                os.replace(src, dst)
+    except Exception:
+        # Never block the bot if migration fails; it's safe to ignore.
+        pass
+
+_migrate_old_layout()
+
+
 # ───────────────────────────── I/O helpers ──────────────────────────────
 def _ensure_dir(path: str) -> None:
-    # If 'path' looks like a file (has an extension), create its parent;
-    # otherwise create the directory itself.
+    # If given a file path (has an extension), ensure its parent exists;
+    # otherwise treat it as a directory and create it directly.
     is_file = os.path.splitext(path)[1] != ""
     directory = (os.path.dirname(path) or ".") if is_file else path
     if not os.path.exists(directory):
         os.makedirs(directory, exist_ok=True)
-
 
 def _safe_read_json(path: str, default: Any) -> Any:
     try:
