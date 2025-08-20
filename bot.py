@@ -99,6 +99,14 @@ def build_embed(list_name: str) -> discord.Embed:
 
 @bot.event
 async def on_ready():
+    # --- Load debug_storage extension (optional; default enabled) ---
+    if os.getenv("ENABLE_DEBUG_STORAGE", "1") == "1":
+        try:
+            await bot.load_extension("debug_storage")
+            print("[debug_storage] loaded")
+        except Exception as e:
+            print(f"[debug_storage] not loaded: {e}")
+
     await bot.add_cog(TimerCog(bot))
     await bot.add_cog(LoggingCog(bot))
     await setup_gen_timers(bot)
@@ -125,7 +133,7 @@ async def delete_list_cmd(interaction: discord.Interaction, name: str):
     delete_list(name)
     await interaction.response.send_message(f"✅ Deleted list '{name}'.", ephemeral=True)
 
-# ━━━ Category entries ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# ━━━ Plain text entries ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 @bot.tree.command(name="add_list_category", description="Add a category header to a list")
 @app_commands.describe(list_name="List to modify", title="Category title")
 async def add_list_category(interaction: discord.Interaction, list_name: str, title: str):
