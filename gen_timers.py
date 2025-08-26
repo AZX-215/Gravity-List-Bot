@@ -490,6 +490,121 @@ class GeneratorCog(commands.Cog):
             f"❌ Electrical generator `{gen_name}` not found.", ephemeral=True
         )
 
+    # ─── Bulk update all Tek gens in a list ─────────────────────────────────────
+    @app_commands.command(
+        name="update_all_gens_tek",
+        description="Set element + shards for ALL Tek generators in a gen list (resets timers/alerts)."
+    )
+    @app_commands.describe(
+        list_name="Generator list name",
+        element="Element to set on every Tek generator",
+        shards="Shards to set on every Tek generator"
+    )
+    async def update_all_gens_tek(
+        self,
+        interaction: discord.Interaction,
+        list_name: str,
+        element: int,
+        shards: int
+    ):
+        if not gen_list_exists(list_name):
+            return await interaction.response.send_message(f"❌ `{list_name}` not found.", ephemeral=True)
+
+        data = load_gen_list(list_name)
+        if not data:
+            return await interaction.response.send_message(f"⚠️ `{list_name}` is empty.", ephemeral=True)
+
+        now = time.time()
+        updated = 0
+        for item in data:
+            if item.get("type") == "Tek":
+                item["element"] = max(0, int(element))
+                item["shards"]  = max(0, int(shards))
+                item["timestamp"] = now
+                item["alerted_low"] = False
+                item["alerted_empty"] = False
+                updated += 1
+
+        if updated == 0:
+            return await interaction.response.send_message(
+                f"⚠️ No Tek generators found in `{list_name}`.", ephemeral=True
+            )
+
+        save_gen_list(list_name, data)
+        await interaction.response.send_message(
+            f"✅ Updated **{updated}** Tek generator(s) in `{list_name}` to **{element} element / {shards} shards**.",
+            ephemeral=True
+        )
+        try:
+            await refresh_dashboard(self.bot, list_name)
+        except Exception as e:
+            await log_to_channel(self.bot, f"⚠️ refresh_dashboard failed for `{list_name}` after bulk Tek update: {e}")
+
+    # ─── Bulk update all Electrical gens in a list ─────────────────────────────
+    @app_commands.command(
+        name="update_all_gens_electrical",
+        description="Set gas and/or imbued gas for ALL Electrical generators in a gen list (resets timers/alerts)."
+    )
+    @app_commands.describe(
+        list_name="Generator list name",
+        gas="Gas to set on every Electrical generator (use -1 to leave unchanged)",
+        imbued="Imbued gas to set on every Electrical generator (use -1 to leave unchanged)"
+    )
+    async def update_all_gens_electrical(
+        self,
+        interaction: discord.Interaction,
+        list_name: str,
+        gas: int = -1,
+        imbued: int = -1
+    ):
+        if not gen_list_exists(list_name):
+            return await interaction.response.send_message(f"❌ `{list_name}` not found.", ephemeral=True)
+
+        if gas < 0 and imbued < 0:
+            return await interaction.response.send_message(
+                "⚠️ Provide at least one of `gas` or `imbued` (≥ 0) to update.", ephemeral=True
+            )
+
+        data = load_gen_list(list_name)
+        if not data:
+            return await interaction.response.send_message(f"⚠️ `{list_name}` is empty.", ephemeral=True)
+
+        now = time.time()
+        updated = 0
+        for item in data:
+            if item.get("type") == "Electrical":
+                changed = False
+                if gas >= 0:
+                    item["gas"] = int(gas)
+                    changed = True
+                if imbued >= 0:
+                    item["imbued"] = int(imbued)
+                    changed = True
+                if changed:
+                    item["timestamp"] = now
+                    item["alerted_low"] = False
+                    item["alerted_empty"] = False
+                    updated += 1
+
+        if updated == 0:
+            return await interaction.response.send_message(
+                f"⚠️ No Electrical generators updated in `{list_name}`.", ephemeral=True
+            )
+
+        save_gen_list(list_name, data)
+        summary_parts = []
+        if gas >= 0: summary_parts.append(f"**{gas} gas**")
+        if imbued >= 0: summary_parts.append(f"**{imbued} imbued**")
+        summary = " / ".join(summary_parts) if summary_parts else "no change"
+        await interaction.response.send_message(
+            f"✅ Updated **{updated}** Electrical generator(s) in `{list_name}` to {summary}.",
+            ephemeral=True
+        )
+        try:
+            await refresh_dashboard(self.bot, list_name)
+        except Exception as e:
+            await log_to_channel(self.bot, f"⚠️ refresh_dashboard failed for `{list_name}` after bulk Elec update: {e}")
+
     @app_commands.command(name="remove_gen", description="Remove a generator entry")
     @app_commands.describe(list_name="Generator list", gen_name="Generator to remove")
     async def remove_gen(self, interaction: discord.Interaction, list_name: str, gen_name: str):
@@ -566,4 +681,3 @@ async def setup(bot: commands.Bot):
 
 # alias for import compatibility (legacy)
 build_gen_timetable_embed = build_gen_embed
-
