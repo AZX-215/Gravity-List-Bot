@@ -531,9 +531,9 @@ async def help_cmd(interaction: discord.Interaction):
         
         "• `/create_gen_list`, `/delete_gen_list`\n"
         
-        "• Tek: `/add_gen_tek`, `/edit_gen_tek`, `/remove_gen`\n"
+        "• Tek: `/add_gen_tek`, `/edit_gen_tek`, `/remove_gen`, `/update_all_gens_tek`\n"
         
-        "• Electrical: `/add_gen_electrical`, `/edit_gen_electrical`, `/remove_gen`\n"
+        "• Electrical: `/add_gen_electrical`, `/edit_gen_electrical`, `/remove_gen`, `/update_all_gens_electrical`\n"
         
         "• Reorder: `/reorder_gen`\n"
         
