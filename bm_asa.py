@@ -3,7 +3,7 @@
 # Free-tier only. Keeps dashboard message IDs across restarts.
 
 from __future__ import annotations
-import os, json, asyncio, datetime as dt
+import os, json, asyncio, datetime as dt, time
 from pathlib import Path
 from typing import Dict, Any, Optional, List
 from discord.ext import commands
@@ -15,12 +15,13 @@ from discord import app_commands
 # -----------------------
 # Config via ENV (Railway)
 # -----------------------
-BM_SERVER_IDS = [s.strip() for s in os.getenv("BM_SERVER_IDS", "").split(",") if s.strip()]
-BM_CHANNEL_ID = int(os.getenv("BM_CHANNEL_ID", "0"))
-BM_API_KEY    = os.getenv("BM_API_KEY", "").strip() or None  # optional
-BM_REFRESH_SEC= int(os.getenv("BM_REFRESH_SEC", "45"))        # 30–120 is polite
-BRAND_NAME    = os.getenv("BRAND_NAME", "Gravity")
-BM_STATE_PATH = Path(os.getenv("BM_STATE_PATH", "./bm_asa_state.json"))  # persists message IDs
+BM_SERVER_IDS  = [s.strip() for s in os.getenv("BM_SERVER_IDS", "").split(",") if s.strip()]
+BM_CHANNEL_ID  = int(os.getenv("BM_CHANNEL_ID", "0"))
+BM_API_KEY     = os.getenv("BM_API_KEY", "").strip() or None  # optional
+BM_REFRESH_SEC = int(os.getenv("BM_REFRESH_SEC", "45"))        # 30–120 is polite
+BM_BACKOFF_SEC = int(os.getenv("BM_BACKOFF_SEC", "600"))       # pause on 429 (default 10m)
+BRAND_NAME     = os.getenv("BRAND_NAME", "Gravity")
+BM_STATE_PATH  = Path(os.getenv("BM_STATE_PATH", "./bm_asa_state.json"))  # persists message IDs
 # -----------------------
 
 BM_BASE = "https://api.battlemetrics.com"
@@ -138,6 +139,7 @@ class BM_ASA(commands.Cog):
         self.bot = bot
         self.message_ids: Dict[str, int] = _load_state()  # server_id -> message_id
         self._dashboard_loop = tasks.loop(seconds=BM_REFRESH_SEC)(self._tick)
+        self._backoff_until = 0.0  # pause edits on 429
 
     # Slash: one-off query (ephemeral)
     @app_commands.command(
@@ -196,6 +198,9 @@ class BM_ASA(commands.Cog):
 
     # ---- loop ----
     async def _tick(self, force: bool = False):
+        now = time.time()
+        if now < self._backoff_until:
+            return
         try:
             channel = self.bot.get_channel(BM_CHANNEL_ID) or await self.bot.fetch_channel(BM_CHANNEL_ID)
         except Exception:
@@ -221,15 +226,39 @@ class BM_ASA(commands.Cog):
         try:
             if mid:
                 msg = await channel.fetch_message(mid)
+
+                # --- Skip edit when nothing changed (compare descriptions) ---
+                old_desc = msg.embeds[0].description if msg.embeds else None
+                if old_desc == embed.description:
+                    return
+
                 await msg.edit(embed=embed)
             else:
                 msg = await channel.send(embed=embed)
                 self.message_ids[server_id] = msg.id
                 _save_state(self.message_ids)
-        except Exception:
-            msg = await channel.send(embed=embed)
-            self.message_ids[server_id] = msg.id
+
+        except discord.NotFound:
+            # Message vanished — recreate
+            sent = await channel.send(embed=embed)
+            self.message_ids[server_id] = sent.id
             _save_state(self.message_ids)
+
+        except discord.Forbidden:
+            # No perms: nothing we can do; just stop trying to recreate
+            print(f"[BM_ASA] Missing permissions to edit dashboard for server {server_id}")
+
+        except discord.HTTPException as e:
+            # Respect rate limits; do NOT create a new message on transient HTTP errors
+            if getattr(e, "status", None) == 429:
+                self._backoff_until = time.time() + BM_BACKOFF_SEC
+                print(f"[BM_ASA] Rate limit hit on {server_id}; backing off for {BM_BACKOFF_SEC}s")
+            else:
+                print(f"[BM_ASA] HTTPException updating server {server_id}: {e}")
+
+        except Exception as e:
+            # Catch-all: log, but do not create duplicates
+            print(f"[BM_ASA] Unexpected error updating server {server_id}: {e}")
 
 # ---------- setup helper ----------
 async def setup_bm_asa(bot: discord.Client):
@@ -247,5 +276,3 @@ async def setup_bm_asa(bot: discord.Client):
     # prevent GC
     if not hasattr(bot, "_bm_asa_ref"):
         bot._bm_asa_ref = cog  # type: ignore
-
-
