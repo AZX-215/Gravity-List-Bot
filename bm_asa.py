@@ -132,7 +132,7 @@ def build_embed(snapshot: Dict[str, Any], bm_server_id: str) -> discord.Embed:
     return embed
 
 # ---------- Cog ----------
-class BM_ASA(discord.ext.commands.Cog):
+class BM_ASA(commands.Cog):
     """BattleMetrics integration for ASA Official — free-tier only, persistent dashboard."""
     def __init__(self, bot: discord.Client):
         self.bot = bot
@@ -247,4 +247,5 @@ async def setup_bm_asa(bot: discord.Client):
     # prevent GC
     if not hasattr(bot, "_bm_asa_ref"):
         bot._bm_asa_ref = cog  # type: ignore
+
 
