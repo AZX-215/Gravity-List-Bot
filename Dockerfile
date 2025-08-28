@@ -1,5 +1,5 @@
-# Use the official Python 3.10 slim base image
-FROM python:3.10-slim
+# Use the official Python 3.11 slim base image
+FROM python:3.11-slim
 
 # Python runtime behavior (set early so it applies to all later layers)
 ENV PYTHONDONTWRITEBYTECODE=1 \
