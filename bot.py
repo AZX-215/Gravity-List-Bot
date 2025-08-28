@@ -111,7 +111,10 @@ async def on_ready():
     await bot.add_cog(TimerCog(bot))
     await bot.add_cog(LoggingCog(bot))
     await setup_gen_timers(bot)
+
+    # NEW: BattleMetrics ASA dashboard (free-tier)
     await setup_bm_asa(bot)
+
     if GUILD_ID:
         await bot.tree.sync(guild=discord.Object(id=GUILD_ID))
     else:
@@ -510,51 +513,40 @@ async def help_cmd(interaction: discord.Interaction):
         "**Gravity List Bot**\n\n"
         
         "**Regular Lists**\n"
-        
         "• `/view_lists`, `/deploy_list name:<list>`\n"
-        
         "• `/create_list`, `/delete_list`\n\n"
         
         "**List Organization**\n"
-        
         "• Categories: `/add_list_category`, `/edit_list_category`, `/remove_list_category`\n"
-        
         "• Plain text: `/add_text`, `/edit_text`, `/remove_text`\n"
-        
         "• Bullets: `/add_bullet`, `/edit_bullet`, `/remove_bullet`\n"
-        
         "• Name entries: `/add_name`, `/remove_name`, `/edit_name`, `/move_name`, `/sort_list`\n"
-        
         "• Assign items: `/assign_to_category`\n\n"
         
         "**Generator Lists & Timers**\n"
-        
         "• `/view_gen_lists`, `/deploy_gen_list name:<gen_list>`\n"
-        
         "• `/create_gen_list`, `/delete_gen_list`\n"
-        
         "• Tek: `/add_gen_tek`, `/edit_gen_tek`, `/remove_gen`, `/update_all_gens_tek`\n"
-        
         "• Electrical: `/add_gen_electrical`, `/edit_gen_electrical`, `/remove_gen`, `/update_all_gens_electrical`\n"
-        
         "• Reorder: `/reorder_gen`\n"
-        
         "• Set ping role: `/set_gen_role`\n"
-        
         "• **Mute alerts:** `/mute_gen_alerts list_name:<gen_list> gen_name:<name>`\n"
-        
         "• **Unmute alerts:** `/unmute_gen_alerts list_name:<gen_list> gen_name:<name>`\n\n"
         
         "**Standalone Timers**\n"
-        
         "• `/create_timer`, `/pause_timer`, `/resume_timer`, `/edit_timer`, `/delete_timer`\n\n"
         
         "**Comments**\n"
-        
         "• `/add_comment`, `/edit_comment`, `/remove_comment`\n\n"
         
-        "**Administration**\n"
+        "**ASA Official — BattleMetrics Dashboard (free tier)**\n"
+        "• `/bm_asa_server_query server_id:<bm_id>` — one-off snapshot for an **ARK: Survival Ascended (Official)** server\n"
+        "• `/bm_asa_dashboard_start` — start auto-refreshing dashboard for servers in `BM_SERVER_IDS`\n"
+        "• `/bm_asa_dashboard_stop` — stop the dashboard\n"
+        "• `/bm_asa_dashboard_refresh` — force an immediate refresh\n"
+        "_Note: Uses BattleMetrics public API; no player lists on ASA officials._\n\n"
         
+        "**Administration**\n"
         "• `/set_log_channel` (admin only)\n"
     )
     await interaction.response.send_message(text, ephemeral=True)
