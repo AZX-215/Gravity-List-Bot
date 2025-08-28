@@ -1,6 +1,7 @@
 import os
 import asyncio
 import discord
+from bm_asa import setup_bm_asa
 from discord.ext import commands
 from discord import app_commands
 from dotenv import load_dotenv
@@ -110,6 +111,7 @@ async def on_ready():
     await bot.add_cog(TimerCog(bot))
     await bot.add_cog(LoggingCog(bot))
     await setup_gen_timers(bot)
+    await setup_bm_asa(bot)
     if GUILD_ID:
         await bot.tree.sync(guild=discord.Object(id=GUILD_ID))
     else:
