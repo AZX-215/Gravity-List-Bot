@@ -2,6 +2,7 @@ import os
 import asyncio
 import discord
 from bm_asa import setup_bm_asa
+from arkstatus_asa import setup_arkstatus_asa
 from discord.ext import commands
 from discord import app_commands
 from dotenv import load_dotenv
