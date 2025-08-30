@@ -540,15 +540,19 @@ async def help_cmd(interaction: discord.Interaction):
         "**Standalone Timers**\n"
         "• `/create_timer`, `/pause_timer`, `/resume_timer`, `/edit_timer`, `/delete_timer`\n\n"
         
-        "**Comments**\n"
-        "• `/add_comment`, `/edit_comment`, `/remove_comment`\n\n"
-        
         "**ASA Official — BattleMetrics Dashboard (free tier)**\n"
         "• `/bm_asa_server_query server_id:<bm_id>` — one-off snapshot for an **ARK: Survival Ascended (Official)** server\n"
         "• `/bm_asa_dashboard_start` — start auto-refreshing dashboard for servers in `BM_SERVER_IDS`\n"
         "• `/bm_asa_dashboard_stop` — stop the dashboard\n"
         "• `/bm_asa_dashboard_refresh` — force an immediate refresh\n"
         "_Note: Uses BattleMetrics public API; no player lists on ASA officials._\n\n"
+
+        "**ASA — Ark Status Dashboard**\n"
+        "• `/as_server_query target:<ArkStatus ID or Name>` — one-off snapshot (supports spaces in names)\n"
+        "• `/as_dashboard_start` — start auto-refreshing dashboard for targets in `AS_TARGETS`\n"
+        "• `/as_dashboard_stop` — stop the dashboard\n"
+        "• `/as_dashboard_refresh` — force an immediate refresh\n"
+        "_Env: `AS_API_KEY` (required), `AS_CHANNEL_ID`, `AS_TARGETS`, optional: `AS_REFRESH_SEC`, `AS_TIER` (`free`/`premium`)._\n\n"
         
         "**Administration**\n"
         "• `/set_log_channel` (admin only)\n"
