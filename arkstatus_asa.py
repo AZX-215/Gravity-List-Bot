@@ -16,14 +16,19 @@ from discord import app_commands
 # ───────────────────────────── Config (Railway ENV) ─────────────────────────────
 AS_API_KEY       = os.getenv("AS_API_KEY", "").strip() or None
 AS_CHANNEL_ID    = int(os.getenv("AS_CHANNEL_ID", "0"))
-# Comma-separated list of Ark Status identifiers: either numeric IDs or server names.
-# Examples: "12345,NA-PVP-Ragnarok-OfficialServer123,EU PVE TheIsland 123"
+# Comma-separated list of Ark Status identifiers: numeric IDs or exact server names (case-sensitive).
 AS_TARGETS       = [s.strip() for s in os.getenv("AS_TARGETS", "").split(",") if s.strip()]
-AS_REFRESH_SEC   = int(os.getenv("AS_REFRESH_SEC", "60"))      # default 60s; see rate notes below
+AS_REFRESH_SEC   = int(os.getenv("AS_REFRESH_SEC", "60"))      # overall dashboard cadence
 AS_BACKOFF_SEC   = int(os.getenv("AS_BACKOFF_SEC", "600"))     # fallback cooldown on 429/no-remaining
 AS_TIER          = os.getenv("AS_TIER", "free").lower()        # "free" or "premium"
 BRAND_NAME       = os.getenv("BRAND_NAME", "Gravity")
-AS_STATE_PATH    = Path(os.getenv("AS_STATE_PATH", "./arkstatus_state.json"))  # persists message IDs
+AS_STATE_PATH    = Path(os.getenv("AS_STATE_PATH", "./arkstatus_state.json"))
+
+# ✅ NEW: optional thumbnail for each widget (defaults to your Specimen Implant image)
+AS_THUMBNAIL_URL = os.getenv(
+    "AS_THUMBNAIL_URL",
+    "https://raw.githubusercontent.com/AZX-215/Gravity-List-Bot/refs/heads/main/images/Specimen_Implant.png"
+).strip() or None
 # ────────────────────────────────────────────────────────────────────────────────
 
 AS_BASE = "https://arkstatus.com/api/v1"
@@ -192,6 +197,10 @@ def build_embed(s: Dict[str, Any]) -> discord.Embed:
     embed.timestamp = dt.datetime.utcnow()
     embed.set_footer(text=f"{BRAND_NAME} • auto-refresh — Ark Status")
 
+    # ✅ NEW: thumbnail (matches your gen_timers style)
+    if AS_THUMBNAIL_URL:
+        embed.set_thumbnail(url=AS_THUMBNAIL_URL)
+
     # Quick facts fields
     embed.add_field(name="Slots", value=f"{players}/{maxp}", inline=True)
     embed.add_field(name="Platform", value=platform, inline=True)
@@ -320,6 +329,8 @@ class ArkStatusASA(commands.Cog):
                 )
                 embed.timestamp = dt.datetime.utcnow()
                 embed.set_footer(text=f"{BRAND_NAME} • auto-refresh — Ark Status")
+                if AS_THUMBNAIL_URL:
+                    embed.set_thumbnail(url=AS_THUMBNAIL_URL)
 
             await self._send_or_edit(channel, target, embed)
 
