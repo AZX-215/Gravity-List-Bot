@@ -116,6 +116,9 @@ async def on_ready():
     # NEW: BattleMetrics ASA dashboard (free-tier)
     await setup_bm_asa(bot)
 
+    # ✅ Ark Status (add this line)
+    await setup_arkstatus_asa(bot)
+
     if GUILD_ID:
         await bot.tree.sync(guild=discord.Object(id=GUILD_ID))
     else:
