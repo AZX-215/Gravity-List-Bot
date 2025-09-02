@@ -11,7 +11,7 @@
 #
 # Optional ENV:
 #   LOG_CHANNEL_ID                     -> where optional deploy announcements can go
-#   BOT_RUNTIME_STATE                  -> path to persistent state (default: lists/runtime_state.json)
+#   BOT_RUNTIME_STATE_PATH                  -> path to persistent state (default: lists/debug/runtime_state.json)
 #   DEBUG_POST_DEPLOY=1                -> if set, post a small "new deployment" message on startup
 #   DEBUG_DEPLOY_LABEL                 -> optional label for your builds
 #
@@ -33,7 +33,12 @@ except Exception:
     BASE_DATA = os.getenv("DATABASE_PATH", "./data.json")
     BASE_DIR  = os.path.dirname(BASE_DATA) or "."
 
-STATE_PATH = Path(os.getenv("BOT_RUNTIME_STATE", os.path.join(BASE_DIR, "runtime_state.json")))
+# Prefer BOT_RUNTIME_STATE_PATH, fall back to BOT_RUNTIME_STATE, then default
+STATE_PATH = Path(
+    os.getenv("BOT_RUNTIME_STATE_PATH")
+    or os.getenv("BOT_RUNTIME_STATE")
+    or os.path.join(BASE_DIR, "runtime_state.json")
+)
 
 # ----------------------------- tiny JSON store --------------------------------
 def _ensure_dir(p: Path) -> None:
