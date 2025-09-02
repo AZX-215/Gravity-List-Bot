@@ -40,12 +40,26 @@ class DiscordLogHandler(logging.Handler):
         self.last_sent = time.time()
 
 
+def _fmt_duration(seconds: float) -> str:
+    seconds = int(seconds)
+    d, rem = divmod(seconds, 86400)
+    h, rem = divmod(rem, 3600)
+    m, s = divmod(rem, 60)
+    parts = []
+    if d: parts.append(f"{d}d")
+    if h: parts.append(f"{h}h")
+    if m: parts.append(f"{m}m")
+    if not parts:
+        parts.append(f"{s}s")
+    return " ".join(parts)
+
+
 class LoggingCog(commands.Cog):
-    """Cog to send INFO+ logs to a Discord channel and track key events."""
+    """Cog to send INFO+ logs to a Discord channel and track key events, with gated disconnect alerts."""
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
-        # Capture INFO+ on the root logger
+        # Root logger to channel (buffered)
         root = logging.getLogger()
         root.setLevel(logging.INFO)
 
@@ -56,20 +70,83 @@ class LoggingCog(commands.Cog):
             handler.setFormatter(formatter)
             root.addHandler(handler)
             self.handler = handler
+            self._log_channel_id = int(channel_id)
         else:
             self.handler = None
+            self._log_channel_id = None
 
-    # ─── Lifecycle ─────────────────────────────────────────────────────────────
+        # Disconnect gating
+        self.disconnect_threshold = int(os.getenv("DISCONNECT_ALERT_THRESHOLD_SEC", "300"))  # default 5 min
+        self._disconnect_since = None      # type: float | None
+        self._disconnect_task = None       # type: asyncio.Task | None
+
+    # --- helpers ---------------------------------------------------------------
+    async def _send_log(self, content: str):
+        """Send a single message directly to LOG_CHANNEL_ID, if configured."""
+        if not self._log_channel_id:
+            return
+        ch = self.bot.get_channel(self._log_channel_id)
+        if ch:
+            try:
+                await ch.send(content)
+            except Exception:
+                pass
+
+    async def _disconnect_watchdog(self):
+        """After threshold, if still disconnected, send one alert."""
+        try:
+            await asyncio.sleep(self.disconnect_threshold)
+            if self._disconnect_since is not None:
+                # Still down past threshold → alert once
+                started = int(self._disconnect_since)
+                mins = self.disconnect_threshold // 60
+                await self._send_log(
+                    f"🚨 Bot has been **disconnected** from the Discord gateway for > **{mins}m** "
+                    f"(since <t:{started}:R>). I’ll post when it reconnects."
+                )
+        except asyncio.CancelledError:
+            pass
+        except Exception:
+            pass
+
+    # --- lifecycle -------------------------------------------------------------
     @commands.Cog.listener()
     async def on_ready(self):
-        # This fires after the cog is added, so we see it in the channel
         logging.getLogger().info("🤖 Bot is ready")
 
     @commands.Cog.listener()
     async def on_disconnect(self):
-        logging.getLogger().warning("💤 Bot disconnected from gateway")
+        # Don't spam the root logger; just a debug trace.
+        logging.getLogger().debug("Gateway disconnect detected")
 
-    # ─── Interaction / Command Logging ──────────────────────────────────────────
+        # Record first time we notice a disconnect and start watchdog
+        if self._disconnect_since is None:
+            self._disconnect_since = time.time()
+            # start or restart watchdog
+            if self._disconnect_task is None or self._disconnect_task.done():
+                self._disconnect_task = asyncio.create_task(self._disconnect_watchdog())
+
+    @commands.Cog.listener()
+    async def on_connect(self):
+        # If we were disconnected and now connected again, decide whether to post a summary
+        if self._disconnect_since is not None:
+            down_for = time.time() - self._disconnect_since
+            # Cancel any pending watchdog
+            if self._disconnect_task and not self._disconnect_task.done():
+                self._disconnect_task.cancel()
+            self._disconnect_task = None
+
+            if down_for >= self.disconnect_threshold:
+                await self._send_log(f"✅ Reconnected to gateway after **{_fmt_duration(down_for)}** of downtime.")
+            # Reset state
+            self._disconnect_since = None
+
+    @commands.Cog.listener()
+    async def on_resumed(self):
+        # Some reconnects come as RESUME; treat the same as connect
+        await self.on_connect()
+
+    # --- Interaction / Command Logging ----------------------------------------
     @commands.Cog.listener()
     async def on_interaction(self, interaction: discord.Interaction):
         if interaction.type is discord.InteractionType.application_command:
@@ -77,7 +154,7 @@ class LoggingCog(commands.Cog):
             user = interaction.user
             logging.getLogger().info(f"📥 {user} used /{name}")
 
-    # ─── Errors ─────────────────────────────────────────────────────────────────
+    # --- Errors ----------------------------------------------------------------
     @commands.Cog.listener()
     async def on_app_command_error(self, interaction, error):
         cmd = interaction.command.name if interaction.command else "unknown"
