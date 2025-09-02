@@ -102,21 +102,25 @@ def build_embed(list_name: str) -> discord.Embed:
 @bot.event
 async def on_ready():
     # --- Load debug_storage extension (optional; default enabled) ---
-    if os.getenv("ENABLE_DEBUG_STORAGE", "1") == "1":
-        try:
-            await bot.load_extension("debug_storage")
-            print("[debug_storage] loaded")
-        except Exception as e:
-            print(f"[debug_storage] not loaded: {e}")
+if os.getenv("ENABLE_DEBUG_STORAGE", "1") == "1" and "debug_storage" not in bot.extensions:
+    try:
+        await bot.load_extension("debug_storage")
+        print("[debug_storage] loaded")
+    except Exception as e:
+        print(f"[debug_storage] not loaded: {e}")
 
+# --- Load debug extension (non-invasive diagnostics) ---
+if "debug" not in bot.extensions:
+    try:
+        await bot.load_extension("debug")
+        print("[debug] loaded")
+    except Exception as e:
+        print(f"[debug] not loaded: {e}")
+    
     await bot.add_cog(TimerCog(bot))
     await bot.add_cog(LoggingCog(bot))
     await setup_gen_timers(bot)
-
-    # NEW: BattleMetrics ASA dashboard (free-tier)
     await setup_bm_asa(bot)
-
-    # ✅ Ark Status (add this line)
     await setup_arkstatus_asa(bot)
 
     if GUILD_ID:
