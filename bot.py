@@ -76,27 +76,66 @@ async def update_list_dashboard(list_name: str):
 
 # ━━━ embed builder for regular lists ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 def build_embed(list_name: str) -> discord.Embed:
-    data = load_list(list_name)
-    # Sort by category according to CATEGORY_ORDER
-    data.sort(
-        key=lambda x: CATEGORY_ORDER.index(x["category"])
-        if x["category"] in CATEGORY_ORDER else len(CATEGORY_ORDER)
+    # Load original data and compute per-type ordinals in the ORIGINAL order,
+    # so indices match what the edit/move/assign commands expect.
+    original = load_list(list_name)
+
+    cat_i = text_i = bullet_i = name_i = 0
+    annotated = []
+    for it in original:
+        it = dict(it)  # shallow copy so we don't mutate stored data
+        cat = it.get("category")
+        if cat == "Category":
+            cat_i += 1
+            it["_ord_cat"] = cat_i
+        elif cat == "Text":
+            text_i += 1
+            it["_ord_text"] = text_i
+        elif cat == "Bullet":
+            bullet_i += 1
+            it["_ord_bullet"] = bullet_i
+        else:
+            # This is a "Name" entry (Owner/Friend/Ally/Beta/Enemy/Item)
+            name_i += 1
+            it["_ord_name"] = name_i
+        annotated.append(it)
+
+    # For display we keep your existing visual sort by CATEGORY_ORDER.
+    data = sorted(
+        annotated,
+        key=lambda x: CATEGORY_ORDER.index(x["category"]) if x["category"] in CATEGORY_ORDER else len(CATEGORY_ORDER)
     )
+
     embed = discord.Embed(title=f"__**{list_name}**__", color=0x808080)
+
     for it in data:
         cat = it["category"]
         if cat == "Category":
-            embed.add_field(name="​", value=f"**{it['name']}**", inline=False)
+            # Show the user-facing index for categories
+            ord_cat = it.get("_ord_cat", 0)
+            embed.add_field(name="​", value=f"**{ord_cat}. {it['name']}**", inline=False)
+
         elif cat == "Text":
-            embed.add_field(name=it['name'], value="​", inline=False)
+            ord_text = it.get("_ord_text", 0)
+            # Put the index in the field name so it’s easy to reference
+            embed.add_field(name=f"{ord_text}. {it['name']}", value="​", inline=False)
+
         elif cat == "Bullet":
-            embed.add_field(name=f"• {it['name']}", value="​", inline=False)
+            ord_bul = it.get("_ord_bullet", 0)
+            embed.add_field(name=f"{ord_bul}. • {it['name']}", value="​", inline=False)
+
         else:
+            # Named entries get an index that matches the /assign_to_category entry_index for "Name"
+            ord_name = it.get("_ord_name", 0)
             prefix = CATEGORY_EMOJIS.get(cat, "")
-            embed.add_field(name=f"{prefix}   {it['name']}", value="​", inline=False)
+            embed.add_field(name=f"{prefix}   {ord_name}. {it['name']}", value="​", inline=False)
+
+            # Preserve your existing comment handling (chunking elsewhere)
             if it.get("comment"):
                 add_chunked_comment_field(embed, it["comment"])
+
     return embed
+
 
 
 @bot.event
