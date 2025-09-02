@@ -30,6 +30,7 @@ LOW_THRESHOLD   = 12 * 3600 # 12 hours in seconds
 
 # Discord embed limits
 EMBED_FIELD_VALUE_MAX = 1024
+MAX_GENERATOR_FIELDS = 24  # keep 1 slot for the signature/timestamp field at the bottom
 
 # ─── Utility: log to a configured channel ───────────────────────────────────────
 async def log_to_channel(bot: commands.Bot, message: str):
@@ -106,7 +107,12 @@ def fmt_remaining(seconds: int) -> str:
 
 # ─── Embed building helpers ────────────────────────────────────────────────────
 def _add_chunked_fields(embed: discord.Embed, lines: list[str], base_name: str = "Generators"):
-    """Split long values so each field value ≤ 1024 chars. Adds a blank line between entries."""
+    """
+    Split generator lines into field-sized chunks (≤1024 chars each), add them to the embed,
+    and ensure we never exceed Discord’s 25-field limit overall by reserving 1 slot for the
+    signature/timestamp field. If there would be more than 24 generator fields, the remainder
+    is compressed into a single final field (also ≤1024).
+    """
     if not lines:
         embed.add_field(
             name=base_name,
@@ -115,11 +121,11 @@ def _add_chunked_fields(embed: discord.Embed, lines: list[str], base_name: str =
         )
         return
 
+    # Build value chunks with a blank line between entries
     chunks = []
     current = ""
     for line in lines:
-        # include two newlines between entries for readability
-        extra = len(line) + (2 if current else 0)
+        extra = len(line) + (2 if current else 0)  # two newlines between entries
         if len(current) + extra > EMBED_FIELD_VALUE_MAX:
             chunks.append(current)
             current = line
@@ -128,12 +134,33 @@ def _add_chunked_fields(embed: discord.Embed, lines: list[str], base_name: str =
     if current:
         chunks.append(current)
 
-    if len(chunks) == 1:
+    total = len(chunks)
+    if total == 1:
         embed.add_field(name=base_name, value=chunks[0], inline=False)
-    else:
-        total = len(chunks)
+        return
+
+    if total <= MAX_GENERATOR_FIELDS:
         for i, chunk in enumerate(chunks, start=1):
             embed.add_field(name=f"{base_name} ({i}/{total})", value=chunk, inline=False)
+        return
+
+    # Too many chunks: add first (MAX_GENERATOR_FIELDS - 1), then compress the rest into one final field.
+    head = chunks[:MAX_GENERATOR_FIELDS - 1]
+    tail = chunks[MAX_GENERATOR_FIELDS - 1:]
+
+    for i, chunk in enumerate(head, start=1):
+        embed.add_field(name=f"{base_name} ({i}/{total})", value=chunk, inline=False)
+
+    remaining_count = len(tail)
+    squashed = "\n\n".join(tail)
+    if len(squashed) > EMBED_FIELD_VALUE_MAX:
+        # leave some space for the notice
+        squashed = squashed[:EMBED_FIELD_VALUE_MAX - 50] + "\n\n…(truncated)"
+    embed.add_field(
+        name=f"{base_name} (compressed, {total - (MAX_GENERATOR_FIELDS - 1)}/{total})",
+        value=squashed + "\n\n_…plus more items compressed to stay within Discord’s embed limits_",
+        inline=False
+    )
 
 # ─── Self-healing dashboard refresh ────────────────────────────────────────────
 async def refresh_dashboard(bot: commands.Bot, list_name: str):
