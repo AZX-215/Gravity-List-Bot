@@ -2,8 +2,17 @@ import os
 import logging
 import time
 import asyncio
+import signal
 import discord
 from discord.ext import commands
+
+# Optional: read runtime state/overrides from the non-invasive debug module
+# If debug.py isn't loaded, DEBUG_STATE stays None and we just skip extras.
+try:
+    from debug import STATE as DEBUG_STATE  # provides get_cfg(), get(), record_shutdown(), push_event()
+except Exception:
+    DEBUG_STATE = None
+
 
 class DiscordLogHandler(logging.Handler):
     """Buffers log records and periodically sends them to a Discord channel."""
@@ -75,12 +84,51 @@ class LoggingCog(commands.Cog):
             self.handler = None
             self._log_channel_id = None
 
-        # Disconnect gating
-        self.disconnect_threshold = int(os.getenv("DISCONNECT_ALERT_THRESHOLD_SEC", "300"))  # default 5 min
+        # Disconnect gating (env default; may be overridden by debug.py state)
+        self._env_threshold = int(os.getenv("DISCONNECT_ALERT_THRESHOLD_SEC", "300") or "300")
         self._disconnect_since = None      # type: float | None
         self._disconnect_task = None       # type: asyncio.Task | None
 
+        # Planned shutdown / maintenance flags
+        self._planned_shutdown_flag = False
+
+        # Optional Railway metadata for nicer state recording
+        self._deployment_id = (
+            os.getenv("RAILWAY_DEPLOYMENT_ID") or
+            os.getenv("RAILWAY_BUILD_ID") or
+            ""
+        )
+        self._git_sha = (os.getenv("RAILWAY_GIT_COMMIT_SHA", "") or "")[:7]
+        self._git_branch = os.getenv("RAILWAY_GIT_BRANCH", "") or ""
+
+        # Register SIGTERM so redeploys are treated as planned (suppress outage spam)
+        try:
+            signal.signal(signal.SIGTERM, self._handle_sigterm)
+        except Exception:
+            # Some environments (e.g., Windows containers) might not allow signals
+            pass
+
     # --- helpers ---------------------------------------------------------------
+    def _threshold(self) -> int:
+        """Effective disconnect threshold. debug.py override > env var."""
+        if DEBUG_STATE is not None:
+            try:
+                ovr = DEBUG_STATE.get_cfg("disconnect_threshold_sec", None)
+                if ovr is not None:
+                    return int(ovr)
+            except Exception:
+                pass
+        return self._env_threshold
+
+    def _maintenance_on(self) -> bool:
+        """Consult debug.py's maintenance flag, if available."""
+        if DEBUG_STATE is None:
+            return False
+        try:
+            return bool(DEBUG_STATE.get("maintenance", False))
+        except Exception:
+            return False
+
     async def _send_log(self, content: str):
         """Send a single message directly to LOG_CHANNEL_ID, if configured."""
         if not self._log_channel_id:
@@ -93,13 +141,12 @@ class LoggingCog(commands.Cog):
                 pass
 
     async def _disconnect_watchdog(self):
-        """After threshold, if still disconnected, send one alert."""
+        """After threshold, if still disconnected and not planned/maintenance, send one alert."""
         try:
-            await asyncio.sleep(self.disconnect_threshold)
-            if self._disconnect_since is not None:
-                # Still down past threshold → alert once
+            await asyncio.sleep(self._threshold())
+            if self._disconnect_since is not None and not self._planned_shutdown_flag and not self._maintenance_on():
                 started = int(self._disconnect_since)
-                mins = self.disconnect_threshold // 60
+                mins = self._threshold() // 60
                 await self._send_log(
                     f"🚨 Bot has been **disconnected** from the Discord gateway for > **{mins}m** "
                     f"(since <t:{started}:R>). I’ll post when it reconnects."
@@ -108,6 +155,17 @@ class LoggingCog(commands.Cog):
             pass
         except Exception:
             pass
+
+    def _handle_sigterm(self, *_):
+        """Mark this shutdown as planned (redeploy) and persist a hint if debug.py is available."""
+        self._planned_shutdown_flag = True
+        if DEBUG_STATE is not None:
+            try:
+                DEBUG_STATE.record_shutdown("redeploy", self._deployment_id, self._git_sha, self._git_branch)
+                DEBUG_STATE.push_event("shutdown", "SIGTERM (planned redeploy) received")
+            except Exception:
+                pass
+        # Allow normal shutdown to proceed
 
     # --- lifecycle -------------------------------------------------------------
     @commands.Cog.listener()
@@ -136,7 +194,7 @@ class LoggingCog(commands.Cog):
                 self._disconnect_task.cancel()
             self._disconnect_task = None
 
-            if down_for >= self.disconnect_threshold:
+            if down_for >= self._threshold() and not self._planned_shutdown_flag and not self._maintenance_on():
                 await self._send_log(f"✅ Reconnected to gateway after **{_fmt_duration(down_for)}** of downtime.")
             # Reset state
             self._disconnect_since = None
