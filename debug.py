@@ -194,7 +194,7 @@ LOG_CHANNEL_ID= int(os.getenv("LOG_CHANNEL_ID","0") or "0")
 
 def _fmt_dur(sec: float)->str:
     s=int(sec); d,rem=divmod(s,86400); h,rem=divmod(rem,3600); m,ss=divmod(rem,60)
-    parts=[]; 
+    parts=[]
     if d: parts.append(f"{d}d")
     if h: parts.append(f"{h}h")
     if m: parts.append(f"{m}m")
@@ -231,20 +231,34 @@ class DebugCog(commands.Cog):
 
     @commands.Cog.listener()
     async def on_ready(self):
-        # record boot and (optionally) announce a new deployment
+        # --- Read prior state BEFORE writing the new boot info ---
+        prev_reason = STATE.get("last_shutdown_reason")
+        prev_ts     = STATE.get("last_shutdown_ts")
+        prev_deploy = STATE.get("last_deployment_id")
+
+        # Record current boot (writes current deployment metadata)
         STATE.record_boot(DEPLOYMENT_ID, GIT_SHA, GIT_BRANCH)
-        try:
-            reason=STATE.get("last_shutdown_reason")
-            ts=STATE.get("last_shutdown_ts")
-            last_id=STATE.get("last_deployment_id")
-            if DEBUG_POST_DEPLOY and reason=="redeploy" and ts:
-                downtime=time.time()-float(ts)
-                changed = DEPLOYMENT_ID and last_id and DEPLOYMENT_ID!=last_id
-                label = f"`{GIT_SHA}`@{GIT_BRANCH}" if GIT_SHA or GIT_BRANCH else "new build"
-                if DEPLOY_LABEL: label = DEPLOY_LABEL
-                await self._send_log(f"🔁 Deployment detected ({label}). Startup after **{_fmt_dur(downtime)}**.")
-        except Exception:
-            pass
+
+        # Optional deploy announcement (planned redeploy OR first deploy after adding debug.py)
+        if DEBUG_POST_DEPLOY:
+            try:
+                planned = (prev_reason == "redeploy" and prev_ts)
+                id_changed = bool(DEPLOYMENT_ID and prev_deploy and DEPLOYMENT_ID != prev_deploy)
+
+                if planned or id_changed:
+                    downtime = (time.time() - float(prev_ts)) if planned else 0
+                    label = f"`{GIT_SHA}`@{GIT_BRANCH}" if (GIT_SHA or GIT_BRANCH) else "new build"
+                    if DEPLOY_LABEL:
+                        label = DEPLOY_LABEL
+                    msg = f"🔁 Deployment detected ({label})."
+                    if planned:
+                        msg += f" Startup after **{_fmt_dur(downtime)}**."
+                    await self._send_log(msg)
+            except Exception:
+                pass
+
+        # Regular ready trace (root logger)
+        logging.getLogger().info("debug.py on_ready: diagnostics ready")
 
     # ---- /diag group ----
     diag = app_commands.Group(name="diag", description="Diagnostics and runtime state")
