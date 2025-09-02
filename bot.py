@@ -102,32 +102,36 @@ def build_embed(list_name: str) -> discord.Embed:
 @bot.event
 async def on_ready():
     # --- Load debug_storage extension (optional; default enabled) ---
-if os.getenv("ENABLE_DEBUG_STORAGE", "1") == "1" and "debug_storage" not in bot.extensions:
-    try:
-        await bot.load_extension("debug_storage")
-        print("[debug_storage] loaded")
-    except Exception as e:
-        print(f"[debug_storage] not loaded: {e}")
+    if os.getenv("ENABLE_DEBUG_STORAGE", "1") == "1" and "debug_storage" not in bot.extensions:
+        try:
+            await bot.load_extension("debug_storage")
+            print("[debug_storage] loaded")
+        except Exception as e:
+            print(f"[debug_storage] not loaded: {e}")
 
-# --- Load debug extension (non-invasive diagnostics) ---
-if "debug" not in bot.extensions:
-    try:
-        await bot.load_extension("debug")
-        print("[debug] loaded")
-    except Exception as e:
-        print(f"[debug] not loaded: {e}")
-    
+    # --- Load debug extension (non-invasive diagnostics) ---
+    if "debug" not in bot.extensions:
+        try:
+            await bot.load_extension("debug")
+            print("[debug] loaded")
+        except Exception as e:
+            print(f"[debug] not loaded: {e}")
+
+    # Your existing startup wiring
     await bot.add_cog(TimerCog(bot))
     await bot.add_cog(LoggingCog(bot))
     await setup_gen_timers(bot)
     await setup_bm_asa(bot)
     await setup_arkstatus_asa(bot)
 
+    # Slash command sync
     if GUILD_ID:
         await bot.tree.sync(guild=discord.Object(id=GUILD_ID))
     else:
         await bot.tree.sync()
+
     print(f"Logged in as {bot.user} (ID: {bot.user.id})")
+
 
 # ━━━ List CRUD ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 @bot.tree.command(name="create_list", description="Create a new list")
