@@ -101,6 +101,11 @@ def build_embed(list_name: str) -> discord.Embed:
 
 @bot.event
 async def on_ready():
+    # prevent duplicate startup on reconnects
+    if getattr(bot, "_startup_done", False):
+        print("[on_ready] already initialized; skipping setup")
+        return
+
     # --- Load debug_storage extension (optional; default enabled) ---
     if os.getenv("ENABLE_DEBUG_STORAGE", "1") == "1" and "debug_storage" not in bot.extensions:
         try:
@@ -117,9 +122,12 @@ async def on_ready():
         except Exception as e:
             print(f"[debug] not loaded: {e}")
 
-    # Your existing startup wiring
-    await bot.add_cog(TimerCog(bot))
-    await bot.add_cog(LoggingCog(bot))
+    # Your existing startup wiring (guard cogs to avoid duplicates)
+    if not bot.get_cog("TimerCog"):
+        await bot.add_cog(TimerCog(bot))
+    if not bot.get_cog("LoggingCog"):
+        await bot.add_cog(LoggingCog(bot))
+
     await setup_gen_timers(bot)
     await setup_bm_asa(bot)
     await setup_arkstatus_asa(bot)
@@ -130,6 +138,7 @@ async def on_ready():
     else:
         await bot.tree.sync()
 
+    bot._startup_done = True
     print(f"Logged in as {bot.user} (ID: {bot.user.id})")
 
 
@@ -562,6 +571,13 @@ async def help_cmd(interaction: discord.Interaction):
         "• `/as_dashboard_refresh` — force an immediate refresh\n"
         "_Env: `AS_API_KEY` (required), `AS_CHANNEL_ID`, `AS_TARGETS`, optional: `AS_REFRESH_SEC`, `AS_TIER` (`free`/`premium`)._\n\n"
         
+        "**Diagnostics (debug.py)**\n"
+        "• `/diag summary` — deployment, uptime, thresholds, maintenance flag\n"
+        "• `/diag tail_logs [lines]` — view recent log lines (in-memory)\n"
+        "• `/diag ratelimit` — 429 counts (15m/1h/24h)\n"
+        "• `/diag set_disconnect_threshold seconds:<int>` — store a threshold override\n"
+        "• `/diag maintenance on|off [note]` — toggle maintenance flag\n\n"
+
         "**Administration**\n"
         "• `/set_log_channel` (admin only)\n"
     )
