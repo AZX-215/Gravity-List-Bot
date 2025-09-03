@@ -26,14 +26,12 @@ from discord.ext import commands
 from discord import app_commands
 
 # ----------------------- storage location defaults ----------------------------
-# Prefer your existing paths from data_manager if available
 try:
     from data_manager import BASE_DATA, BASE_DIR
 except Exception:
     BASE_DATA = os.getenv("DATABASE_PATH", "./data.json")
     BASE_DIR  = os.path.dirname(BASE_DATA) or "."
 
-# Prefer BOT_RUNTIME_STATE_PATH, fall back to BOT_RUNTIME_STATE, then default
 STATE_PATH = Path(
     os.getenv("BOT_RUNTIME_STATE_PATH")
     or os.getenv("BOT_RUNTIME_STATE")
@@ -235,17 +233,20 @@ class DebugCog(commands.Cog):
         prev_reason = STATE.get("last_shutdown_reason")
         prev_ts     = STATE.get("last_shutdown_ts")
         prev_deploy = STATE.get("last_deployment_id")
+        prev_sha    = STATE.get("last_git_sha")
+        had_prior   = bool(STATE.get("last_boot_ts"))
 
         # Record current boot (writes current deployment metadata)
         STATE.record_boot(DEPLOYMENT_ID, GIT_SHA, GIT_BRANCH)
 
-        # Optional deploy announcement (planned redeploy OR first deploy after adding debug.py)
-        if DEBUG_POST_DEPLOY:
+        # Optional deploy announcement (planned redeploy OR id change OR sha change), only if we had a prior boot
+        if DEBUG_POST_DEPLOY and had_prior:
             try:
-                planned = (prev_reason == "redeploy" and prev_ts)
-                id_changed = bool(DEPLOYMENT_ID and prev_deploy and DEPLOYMENT_ID != prev_deploy)
+                planned    = (prev_reason == "redeploy" and prev_ts)
+                id_changed = bool(DEPLOYMENT_ID and (prev_deploy != DEPLOYMENT_ID))
+                sha_changed= bool(GIT_SHA and (prev_sha != GIT_SHA))
 
-                if planned or id_changed:
+                if planned or id_changed or sha_changed:
                     downtime = (time.time() - float(prev_ts)) if planned else 0
                     label = f"`{GIT_SHA}`@{GIT_BRANCH}" if (GIT_SHA or GIT_BRANCH) else "new build"
                     if DEPLOY_LABEL:
@@ -257,7 +258,6 @@ class DebugCog(commands.Cog):
             except Exception:
                 pass
 
-        # Regular ready trace (root logger)
         logging.getLogger().info("debug.py on_ready: diagnostics ready")
 
     # ---- /diag group ----
