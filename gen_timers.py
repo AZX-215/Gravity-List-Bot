@@ -333,12 +333,6 @@ class GeneratorCog(commands.Cog):
     def cog_unload(self):
         self.generator_list_loop.cancel()
 
-    @generator_list_loop.before_loop
-    async def _before_generator_list_loop(self):
-        await self.bot.wait_until_ready()
-        # small startup stagger to avoid a burst of PATCH edits right after boot
-        await asyncio.sleep(float(os.getenv("GEN_REFRESH_STARTUP_STAGGER_SEC", "2.0")))
-
     @tasks.loop(seconds=120)
     async def generator_list_loop(self):
         """Periodically refresh dashboards and evaluate alert pings."""
@@ -361,6 +355,12 @@ class GeneratorCog(commands.Cog):
                     )
             except Exception as e:
                 await log_to_channel(self.bot, f"⚠️ generator_list_loop error on `{name}`: {e}")
+
+    @generator_list_loop.before_loop
+    async def _before_generator_list_loop(self):
+        await self.bot.wait_until_ready()
+        # small startup stagger to avoid a burst of PATCH edits right after boot
+        await asyncio.sleep(float(os.getenv("GEN_REFRESH_STARTUP_STAGGER_SEC", "2.0")))
 
     @app_commands.command(name="create_gen_list", description="Create a new generator list")
     @app_commands.describe(name="Name of new generator list")
