@@ -569,68 +569,87 @@ async def deploy_gen_list_cmd(interaction: discord.Interaction, name: str):
 # ━━━ Help & Logs ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 @bot.tree.command(name="help", description="Show usage instructions")
 async def help_cmd(interaction: discord.Interaction):
-    text = (
-        "**Gravity List Bot**\n\n"
-        
-        "**Regular Lists**\n"
-        "• `/view_lists`, `/deploy_list name:<list>`\n"
-        "• `/create_list`, `/delete_list`\n\n"
-        
-        "**List Organization**\n"
-        "• Categories: `/add_list_category`, `/edit_list_category`, `/remove_list_category`\n"
-        "• Plain text: `/add_text`, `/edit_text`, `/remove_text`\n"
-        "• Bullets: `/add_bullet`, `/edit_bullet`, `/remove_bullet`\n"
-        "• Name entries: `/add_name`, `/remove_name`, `/edit_name`, `/move_name`, `/sort_list`\n"
-        "• Assign items: `/assign_to_category`\n\n"
-        
-        "**Generator Lists & Timers**\n"
-        "• `/view_gen_lists`, `/deploy_gen_list name:<gen_list>`\n"
-        "• `/create_gen_list`, `/delete_gen_list`\n"
-        "• Tek: `/add_gen_tek`, `/edit_gen_tek`, `/remove_gen`, `/update_all_gens_tek`\n"
-        "• Electrical: `/add_gen_electrical`, `/edit_gen_electrical`, `/remove_gen`, `/update_all_gens_electrical`\n"
-        "• Reorder: `/reorder_gen`\n"
-        "• Set ping role: `/set_gen_role`\n"
-        "• **Mute alerts:** `/mute_gen_alerts list_name:<gen_list> gen_name:<name>`\n"
-        "• **Unmute alerts:** `/unmute_gen_alerts list_name:<gen_list> gen_name:<name>`\n\n"
-        
-        "**Standalone Timers**\n"
-        "• `/create_timer`, `/pause_timer`, `/resume_timer`, `/edit_timer`, `/delete_timer`\n\n"
-        
-        "**ASA Official — BattleMetrics Dashboard (free tier)**\n"
-        "• `/bm_asa_server_query server_id:<bm_id>` — one-off snapshot for an **ARK: Survival Ascended (Official)** server\n"
-        "• `/bm_asa_dashboard_start` — start auto-refreshing dashboard for servers in `BM_SERVER_IDS`\n"
-        "• `/bm_asa_dashboard_stop` — stop the dashboard\n"
-        "• `/bm_asa_dashboard_refresh` — force an immediate refresh\n"
-        "_Note: Uses BattleMetrics public API; no player lists on ASA officials._\n\n"
-
-        "**ASA — Ark Status Dashboard**\n"
-        "• `/as_server_query target:<ArkStatus ID or Name>` — one-off snapshot (supports spaces in names)\n"
-        "• `/as_dashboard_start` — start auto-refreshing dashboard for targets in `AS_TARGETS`\n"
-        "• `/as_dashboard_stop` — stop the dashboard\n"
-        "• `/as_dashboard_refresh` — force an immediate refresh\n"
-        "_Env: `AS_API_KEY` (required), `AS_CHANNEL_ID`, `AS_TARGETS`, optional: `AS_REFRESH_SEC`, `AS_TIER` (`free`/`premium`)._\n\n"
-        
-        "**Diagnostics (debug.py)**\n"
-        "• `/diag summary` — deployment, uptime, thresholds, maintenance flag\n"
-        "• `/diag tail_logs [lines]` — view recent log lines (in-memory)\n"
-        "• `/diag ratelimit` — 429 counts (15m/1h/24h)\n"
-        "• `/diag set_disconnect_threshold seconds:<int>` — store a threshold override\n"
-        "• `/diag maintenance on|off [note]` — toggle maintenance flag\n\n"
-
-        "**Administration**\n"
-        "• `/set_log_channel` (admin only)\n"
+    # Build an embed-based help to avoid the 2000-char message content limit.
+    embed = discord.Embed(
+        title="Gravity List Bot — Help",
+        description="All commands are **slash** commands. Use `/` in Discord to discover and autocomplete.",
+        color=0x5865F2
     )
-    await interaction.response.send_message(text, ephemeral=True)
 
-@bot.tree.command(name="set_log_channel", description="Set channel for bot logs")
-@app_commands.default_permissions(administrator=True)
-@app_commands.describe(channel="Text channel")
-async def set_log_channel(interaction: discord.Interaction, channel: discord.TextChannel):
-    cog = bot.get_cog("LoggingCog")
-    if not cog or not hasattr(cog,"handler"):
-        return await interaction.response.send_message("❌ Logging not enabled.", ephemeral=True)
-    cog.handler.channel_id = channel.id
-    await interaction.response.send_message(f"✅ Log channel set to {channel.mention}", ephemeral=True)
+    def add_section(title: str, lines: list[str]):
+        """Add a section to the embed, splitting into multiple fields if >1024 chars."""
+        text = "\n".join(lines)
+        chunks = []
+        while len(text) > 1024:
+            cut = text.rfind("\n", 0, 1000)  # try to break on a newline
+            if cut == -1:
+                cut = 1000
+            chunks.append(text[:cut])
+            text = text[cut:].lstrip("\n")
+        chunks.append(text)
+
+        total = len(chunks)
+        for i, chunk in enumerate(chunks, start=1):
+            name = f"{title} ({i}/{total})" if total > 1 else title
+            embed.add_field(name=name, value=chunk or "​", inline=False)
+
+    add_section("Regular Lists", [
+        "• `/view_lists` — list your lists",
+        "• `/deploy_list name:<list>` — (re)render a list in-channel",
+        "• `/create_list`, `/delete_list`",
+    ])
+
+    add_section("List Organization", [
+        "• Categories: `/add_list_category`, `/edit_list_category`, `/remove_list_category`",
+        "• Plain text: `/add_text`, `/edit_text`, `/remove_text`",
+        "• Bullets: `/add_bullet`, `/edit_bullet`, `/remove_bullet`",
+        "• Name entries: `/add_name`, `/remove_name`, `/edit_name`, `/move_name`, `/sort_list`",
+        "• Assign items: `/assign_to_category`",
+        "_Tip: Indices are shown in the list embed so index-based commands are easy to use._",
+    ])
+
+    add_section("Generator Lists & Timers", [
+        "• `/view_gen_lists`, `/deploy_gen_list name:<gen_list>`",
+        "• `/create_gen_list`, `/delete_gen_list`",
+        "• Tek: `/add_gen_tek`, `/edit_gen_tek`, `/remove_gen`, `/update_all_gens_tek`",
+        "• Electrical: `/add_gen_electrical`, `/edit_gen_electrical`, `/remove_gen`, `/update_all_gens_electrical`",
+        "• Reorder: `/reorder_gen`",
+        "• Set ping role: `/set_gen_role`",
+        "• Mute/unmute: `/mute_gen_alerts` and `/unmute_gen_alerts`",
+        "_Gen dashboards auto-refresh periodically. LOW=≤12h remaining; EMPTY=0._",
+    ])
+
+    add_section("Standalone Timers", [
+        "• `/create_timer`, `/pause_timer`, `/resume_timer`, `/edit_timer`, `/delete_timer`",
+    ])
+
+    add_section("ASA Official — BattleMetrics Dashboard", [
+        "• `/bm_asa_server_query server_id:<bm_id>` — one-off snapshot",
+        "• `/bm_asa_dashboard_start` / `/bm_asa_dashboard_stop` / `/bm_asa_dashboard_refresh`",
+        "_Uses BattleMetrics public API; ASA officials don’t expose player lists on free tier._",
+    ])
+
+    add_section("ASA — Ark Status Dashboard", [
+        "• `/as_server_query target:<ArkStatus ID or Name>` — one-off snapshot",
+        "• `/as_dashboard_start` / `/as_dashboard_stop` / `/as_dashboard_refresh`",
+        "_Env: `AS_API_KEY` (required), `AS_CHANNEL_ID`, `AS_TARGETS`; optional: `AS_REFRESH_SEC`, `AS_TIER`._",
+    ])
+
+    add_section("Diagnostics (debug.py)", [
+        "• `/diag summary` — deployment/uptime/thresholds/maintenance",
+        "• `/diag tail_logs [lines]` — in-memory log tail",
+        "• `/diag ratelimit` — 429 counts (15m/1h/24h)",
+        "• `/diag set_disconnect_threshold seconds:<int>` — store override",
+        "• `/diag maintenance on|off [note]` — toggle maintenance flag",
+        "_Set `DEBUG_POST_DEPLOY=1` to announce new deployments in the log channel._",
+    ])
+
+    add_section("Administration", [
+        "• `/set_log_channel` (admin only)",
+    ])
+
+    # Send as ephemeral embed (safe; avoids 2000-char content cap).
+    await interaction.response.send_message(embed=embed, ephemeral=True)
 
 # Run
 bot.run(TOKEN)
