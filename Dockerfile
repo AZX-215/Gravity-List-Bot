@@ -1,26 +1,20 @@
-# Use the official Python 3.11 slim base image
+# Python image (small, stable)
 FROM python:3.11-slim
 
-# Python runtime behavior (set early so it applies to all later layers)
-ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1
+ENV PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1
 
-# Set a working directory
 WORKDIR /app
 
-# Copy requirements and install dependencies
+# Install deps
 COPY requirements.txt .
-RUN python -m pip install -U pip
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy all project files into the container
+# Copy source
 COPY . .
 
-# (Optional) Expose port if your bot uses a web endpoint for keep-alive
+# Railway will route to this; our app binds to $PORT (or 8080)
 EXPOSE 8080
 
-# (Optional) Placeholder; Railway will inject the real value
-# ENV BOT_TOKEN=""
-
-# Default command to run your bot
+# Start the bot (FastAPI server is started in-process by bot.py)
 CMD ["python", "bot.py"]
