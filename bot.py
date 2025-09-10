@@ -17,12 +17,30 @@ from timers import TimerCog
 from gen_timers import setup_gen_timers, build_gen_timetable_embed
 from logging_cog import LoggingCog
 
+# ── NEW (safe import for screenshot ingest API) ─────────────────────────────
+try:
+    from screenshots_api import setup_screenshot_api, run_fastapi_in_thread
+except Exception:
+    setup_screenshot_api = None
+    run_fastapi_in_thread = None
+# ───────────────────────────────────────────────────────────────────────────
+
 load_dotenv()
 TOKEN    = os.getenv("DISCORD_TOKEN")
 GUILD_ID = int(os.getenv("GUILD_ID", 0))
 
 intents = discord.Intents.default()
 bot     = commands.Bot(command_prefix="!", intents=intents)
+
+# ── NEW (start FastAPI in a background thread if available) ────────────────
+if setup_screenshot_api and run_fastapi_in_thread:
+    try:
+        api_app = setup_screenshot_api(bot)
+        run_fastapi_in_thread(api_app, int(os.getenv("PORT", "8080")))
+        print("[screenshots_api] started")
+    except Exception as e:
+        print(f"[screenshots_api] not started: {e}")
+# ───────────────────────────────────────────────────────────────────────────
 
 # Category sort order for embed building and sort_list
 CATEGORY_EMOJIS = {
