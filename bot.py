@@ -17,7 +17,7 @@ from timers import TimerCog
 from gen_timers import setup_gen_timers, build_gen_timetable_embed
 from logging_cog import LoggingCog
 
-# ── NEW (safe import for screenshot ingest API) ─────────────────────────────
+# ── Screenshot ingest API (safe import) ─────────────────────────────────────
 try:
     from screenshots_api import setup_screenshot_api, run_fastapi_in_thread
 except Exception:
@@ -32,12 +32,15 @@ GUILD_ID = int(os.getenv("GUILD_ID", 0))
 intents = discord.Intents.default()
 bot     = commands.Bot(command_prefix="!", intents=intents)
 
-# ── NEW (start FastAPI in a background thread if available) ────────────────
+# ── Start FastAPI in a background thread; defer worker until loop exists ───
 if setup_screenshot_api and run_fastapi_in_thread:
     try:
-        api_app = setup_screenshot_api(bot)
+        # CHANGED: setup returns (app, start_worker) now
+        api_app, start_screenshot_worker = setup_screenshot_api(bot)
         run_fastapi_in_thread(api_app, int(os.getenv("PORT", "8080")))
-        print("[screenshots_api] started")
+        # stash starter to call inside on_ready
+        bot._start_screenshot_worker = start_screenshot_worker
+        print("[screenshots_api] http server started")
     except Exception as e:
         print(f"[screenshots_api] not started: {e}")
 # ───────────────────────────────────────────────────────────────────────────
@@ -194,6 +197,15 @@ async def on_ready():
         await bot.tree.sync(guild=discord.Object(id=GUILD_ID))
     else:
         await bot.tree.sync()
+
+    # NEW: start screenshot worker once the loop is alive (runs only once)
+    if getattr(bot, "_start_screenshot_worker", None) and not getattr(bot, "_shot_worker_started", False):
+        try:
+            await bot._start_screenshot_worker()
+            bot._shot_worker_started = True
+            print("[screenshots_api] worker started")
+        except Exception as e:
+            print(f"[screenshots_api] worker not started: {e}")
 
     bot._startup_done = True
     print(f"Logged in as {bot.user} (ID: {bot.user.id})")
