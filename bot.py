@@ -1,7 +1,7 @@
 import os
 import asyncio
 import discord
-from bm_asa import setup_bm_asa
+# from bm_asa import setup_bm_asa  # ← moved behind a feature flag (see on_ready)
 from arkstatus_asa import setup_arkstatus_asa
 from discord.ext import commands
 from discord import app_commands
@@ -189,7 +189,18 @@ async def on_ready():
         await bot.add_cog(LoggingCog(bot))
 
     await setup_gen_timers(bot)
-    await setup_bm_asa(bot)
+
+    # ── Feature flag: BattleMetrics (enable/disable via env) ────────────────
+    if os.getenv("ENABLE_BATTLEMETRICS", "True") == "True":
+        try:
+            from bm_asa import setup_bm_asa  # import only if enabled
+            await setup_bm_asa(bot)
+            print("[bm_asa] enabled")
+        except Exception as e:
+            print(f"[bm_asa] not enabled: {e}")
+    else:
+        print("[bm_asa] disabled via ENABLE_BATTLEMETRICS")
+
     await setup_arkstatus_asa(bot)
 
     # Slash command sync
