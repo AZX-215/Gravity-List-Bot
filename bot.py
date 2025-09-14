@@ -201,7 +201,16 @@ async def on_ready():
     else:
         print("[bm_asa] disabled via ENABLE_BATTLEMETRICS")
 
+    # --- Ark Status integration (always on unless it throws) ---
     await setup_arkstatus_asa(bot)
+
+    # --- NEW: Load Gravity Capture downloader (GitHub Releases) ---
+    if "gravity_capture" not in bot.extensions:
+        try:
+            await bot.load_extension("gravity_capture")  # file `gravity_capture.py` next to bot.py or on PYTHONPATH
+            print("[gravity_capture] loaded")
+        except Exception as e:
+            print(f"[gravity_capture] not loaded: {e}")
 
     # Slash command sync
     if GUILD_ID:
@@ -209,7 +218,7 @@ async def on_ready():
     else:
         await bot.tree.sync()
 
-    # NEW: start screenshot worker once the loop is alive (runs only once)
+    # Start screenshot worker once the loop is alive (runs only once)
     if getattr(bot, "_start_screenshot_worker", None) and not getattr(bot, "_shot_worker_started", False):
         try:
             await bot._start_screenshot_worker()
@@ -612,10 +621,11 @@ async def deploy_gen_list_cmd(interaction: discord.Interaction, name: str):
 async def help_cmd(interaction: discord.Interaction):
     # Build an embed-based help to avoid the 2000-char message content limit.
     embed = discord.Embed(
-        title="Gravity List Bot — Help",
-        description="All commands are **slash** commands. Use `/` in Discord to discover and autocomplete.",
-        color=0x5865F2
+        title="Gravity List — Commands",
+        description="Clean dashboards for names, notes, timers, generators, and server status.",
+        color=discord.Color.blurple()
     )
+    embed.set_footer(text="All commands are slash commands. Use autocomplete where available.")
 
     def add_section(title: str, lines: list[str]):
         """Add a section to the embed, splitting into multiple fields if >1024 chars."""
@@ -634,49 +644,62 @@ async def help_cmd(interaction: discord.Interaction):
             name = f"{title} ({i}/{total})" if total > 1 else title
             embed.add_field(name=name, value=chunk or "​", inline=False)
 
-    add_section("Regular Lists", [
+    # — Regular lists —
+    add_section("Regular Lists — Create, View, Deploy", [
         "• `/view_lists` — list your lists",
         "• `/deploy_list name:<list>` — (re)render a list in-channel",
         "• `/create_list`, `/delete_list`",
     ])
 
-    add_section("List Organization", [
+    add_section("Regular Lists — Organize & Edit", [
         "• Categories: `/add_list_category`, `/edit_list_category`, `/remove_list_category`",
-        "• Plain text: `/add_text`, `/edit_text`, `/remove_text`",
+        "• Text: `/add_text`, `/edit_text`, `/remove_text`",
         "• Bullets: `/add_bullet`, `/edit_bullet`, `/remove_bullet`",
-        "• Name entries: `/add_name`, `/remove_name`, `/edit_name`, `/move_name`, `/sort_list`",
-        "• Assign items: `/assign_to_category`",
+        "• Names: `/add_name`, `/remove_name`, `/edit_name`, `/move_name`, `/sort_list`",
+        "• Comments on names: `/add_comment`, `/edit_comment`, `/remove_comment`",
+        "• Assign items under a category: `/assign_to_category`",
         "_Tip: Indices are shown in the list embed so index-based commands are easy to use._",
     ])
 
-    add_section("Generator Lists & Timers", [
+    # — Generator lists & timers —
+    add_section("Generator Lists (Fuel Timers)", [
         "• `/view_gen_lists`, `/deploy_gen_list name:<gen_list>`",
-        "• `/create_gen_list`, `/delete_gen_list`",
-        "• Tek: `/add_gen_tek`, `/edit_gen_tek`, `/remove_gen`, `/update_all_gens_tek`",
-        "• Electrical: `/add_gen_electrical`, `/edit_gen_electrical`, `/remove_gen`, `/update_all_gens_electrical`",
+        "• Create/delete: `/create_gen_list`, `/delete_gen_list`",
+        "• Tek: `/add_gen_tek`, `/edit_gen_tek`, `/update_all_gens_tek`",
+        "• Electrical: `/add_gen_electrical`, `/edit_gen_electrical`, `/update_all_gens_electrical`",
+        "• Remove generator: `/remove_gen`",
         "• Reorder: `/reorder_gen`",
-        "• Set ping role: `/set_gen_role`",
-        "• Mute/unmute: `/mute_gen_alerts` and `/unmute_gen_alerts`",
-        "_Gen dashboards auto-refresh periodically. LOW=≤12h remaining; EMPTY=0._",
+        "• Ping role: `/set_gen_role`",
+        "• Mute/unmute: `/mute_gen_alerts`, `/unmute_gen_alerts`",
+        "_Gen dashboards auto-refresh; LOW=≤12h remaining; EMPTY=0._",
     ])
 
     add_section("Standalone Timers", [
         "• `/create_timer`, `/pause_timer`, `/resume_timer`, `/edit_timer`, `/delete_timer`",
     ])
 
-    add_section("ASA Official — BattleMetrics Dashboard", [
+    # — Server dashboards —
+    add_section("ASA Official — BattleMetrics", [
         "• `/bm_asa_server_query server_id:<bm_id>` — one-off snapshot",
         "• `/bm_asa_dashboard_start` / `/bm_asa_dashboard_stop` / `/bm_asa_dashboard_refresh`",
-        "_Uses BattleMetrics public API; ASA officials don’t expose player lists on free tier._",
+        "_Uses BattleMetrics public API; free tier limits may apply._",
     ])
 
-    add_section("ASA — Ark Status Dashboard", [
+    add_section("ASA — Ark Status", [
         "• `/as_server_query target:<ArkStatus ID or Name>` — one-off snapshot",
         "• `/as_dashboard_start` / `/as_dashboard_stop` / `/as_dashboard_refresh`",
         "_Env: `AS_API_KEY` (required), `AS_CHANNEL_ID`, `AS_TARGETS`; optional: `AS_REFRESH_SEC`, `AS_TIER`._",
     ])
 
-    add_section("Diagnostics (debug.py)", [
+    # — Downloads —
+    add_section("Downloads — Gravity Capture", [
+        "• `/download_grav_capture` — buttons for the latest **Installer (.exe)** and **Portable (.zip)** from GitHub Releases",
+        "• `/grav_capture_version` — latest tag + checksum files (.sha256)",
+        "_Repo is configurable via env: `GC_REPO_OWNER`, `GC_REPO_NAME`; optional `GITHUB_TOKEN` for higher rate limits._",
+    ])
+
+    # — Diagnostics & admin —
+    add_section("Diagnostics", [
         "• `/diag summary` — deployment/uptime/thresholds/maintenance",
         "• `/diag tail_logs [lines]` — in-memory log tail",
         "• `/diag ratelimit` — 429 counts (15m/1h/24h)",
@@ -686,7 +709,7 @@ async def help_cmd(interaction: discord.Interaction):
     ])
 
     add_section("Administration", [
-        "• `/set_log_channel` (admin only)",
+        "• `/set_log_channel` — set the channel where the bot posts logs/alerts (admin only)",
     ])
 
     # Send as ephemeral embed (safe; avoids 2000-char content cap).
