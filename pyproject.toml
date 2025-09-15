@@ -1,0 +1,15 @@
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+extend-exclude = ["venv", "lists", "__pycache__"]
+# Ignore long lines globally for now; we’ll tighten later.
+ignore = ["E501"]
+
+# Temporarily allow bare `except:` only in timers.py until we refactor.
+[tool.ruff.per-file-ignores]
+"timers.py" = ["E722"]
+
+[tool.black]
+line-length = 120
+target-version = ["py311"]
+exclude = "venv|lists|__pycache__"
