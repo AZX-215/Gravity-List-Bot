@@ -97,9 +97,9 @@ class LoggingCog(commands.Cog):
 
         # Optional Railway metadata for nicer state recording
         self._deployment_id = (
-            os.getenv("RAILWAY_DEPLOYMENT_ID") or
-            os.getenv("RAILWAY_BUILD_ID") or
-            ""
+            os.getenv("RAILWAY_DEPLOYMENT_ID")
+            or os.getenv("RAILWAY_BUILD_ID")
+            or ""
         )
         self._git_sha = (os.getenv("RAILWAY_GIT_COMMIT_SHA", "") or "")[:7]
         self._git_branch = os.getenv("RAILWAY_GIT_BRANCH", "") or ""
@@ -175,7 +175,7 @@ class LoggingCog(commands.Cog):
     async def on_ready(self):
         logging.getLogger().info("🤖 Bot is ready")
 
-    @commands.Cog.listener())
+    @commands.Cog.listener()
     async def on_disconnect(self):
         # Don't spam the root logger; just a debug trace.
         logging.getLogger().debug("Gateway disconnect detected")
