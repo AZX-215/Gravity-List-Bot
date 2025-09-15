@@ -5,7 +5,7 @@
 from __future__ import annotations
 import os, json, asyncio, datetime as dt, time
 from pathlib import Path
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional
 from discord.ext import commands
 import aiohttp
 import discord
@@ -30,7 +30,11 @@ BM_BASE = "https://api.battlemetrics.com"
 def _load_state() -> Dict[str, int]:
     if BM_STATE_PATH.exists():
         try:
-            return json.loads(BM_STATE_PATH.read_text(encoding="utf-8"))
+            raw = BM_STATE_PATH.read_text(encoding="utf-8")
+            data = json.loads(raw)
+            if isinstance(data, dict):
+                # ensure keys are strings and values are ints
+                return {str(k): int(v) for k, v in data.items() if str(k) and str(v).isdigit()}
         except Exception:
             return {}
     return {}
@@ -57,12 +61,13 @@ async def get_server_snapshot(server_id: str, api_key: Optional[str] = None) -> 
             return None
 
     try:
-        attrs = data["data"]["attributes"]
-        details = attrs.get("details") or {}
+        # Minimal fields for dashboarding
+        d = data.get("data", {})
+        attrs = d.get("attributes", {}) or {}
+        details = attrs.get("details", {}) or {}
         return {
-            "id": server_id,
             "name": attrs.get("name"),
-            "status": attrs.get("status"),
+            "status": attrs.get("status"),  # online|offline|dead|...
             "players": attrs.get("players"),
             "maxPlayers": attrs.get("maxPlayers"),
             "map": details.get("map"),
