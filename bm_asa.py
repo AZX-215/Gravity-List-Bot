@@ -2,13 +2,17 @@
 # Gravity List Bot — BattleMetrics (ASA Official) integration, single-file
 # Free-tier only. Keeps dashboard message IDs across restarts.
 
+import os
+import json
+import asyncio
+import time
+import datetime as dt
+import aiohttp
+import discord
 from __future__ import annotations
-import os, json, asyncio, datetime as dt, time
 from pathlib import Path
 from typing import Dict, Any, Optional
 from discord.ext import commands
-import aiohttp
-import discord
 from discord.ext import tasks
 from discord import app_commands
 
@@ -87,26 +91,30 @@ DOTS = {"online": "🟢", "offline": "🔴", "dead": "⚫️", "unknown": "⚪�
 
 def _status_color(status: Optional[str]) -> int:
     s = (status or "unknown").lower()
-    if s == "online": return OK_GREEN
-    if s in ("offline","dead"): return ERR_RED
+    if s == "online":
+        return OK_GREEN
+    if s in ("offline", "dead"):
+        return ERR_RED
     return WARN_YELLOW
 
-def _dot(status: Optional[str]) -> str:
-    return DOTS.get((status or "unknown").lower(), DOTS["unknown"])
 
 def _pct(num: Optional[int], den: Optional[int]) -> int:
     try:
-        if not den: return 0
+        if not den:
+            return 0
         return max(0, min(100, int(round((num or 0) * 100 / den))))
     except Exception:
         return 0
 
-def bar(current: Optional[int], maximum: Optional[int], width: int = 22) -> str:
+
+def _bar(current: Optional[int], maximum: Optional[int], width: int = 10) -> str:
     cur = max(0, int(current or 0))
-    mx  = max(cur, int(maximum or 0))
-    if mx <= 0: return "—"
+    mx = max(cur, int(maximum or 0))
+    if mx <= 0:
+        return "—"
     filled = int(round((cur / mx) * width))
     return "▰" * filled + "▱" * (width - filled)
+
 
 def build_embed(snapshot: Dict[str, Any], bm_server_id: str) -> discord.Embed:
     title_game  = "ARK: Survival Ascended (Official)"
@@ -281,3 +289,4 @@ async def setup_bm_asa(bot: discord.Client):
     # prevent GC
     if not hasattr(bot, "_bm_asa_ref"):
         bot._bm_asa_ref = cog  # type: ignore
+
