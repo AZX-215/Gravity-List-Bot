@@ -1,9 +1,23 @@
 version: 2
+
 updates:
+  # Keep GitHub Actions up to date
   - package-ecosystem: "github-actions"
     directory: "/"
-    schedule: { interval: "weekly" }
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    open-pull-requests-limit: 5
+    labels: ["deps", "ci"]
+
+  # Keep Python deps up to date (requirements.txt)
   - package-ecosystem: "pip"
     directory: "/"
-    schedule: { interval: "weekly" }
-    # If you pin versions in requirements.txt, Dependabot will open PRs
+    schedule:
+      interval: "daily"
+      time: "09:00"
+    open-pull-requests-limit: 10
+    labels: ["deps", "python"]
+    commit-message:
+      prefix: "deps(pip)"
