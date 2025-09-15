@@ -1,0 +1,10 @@
+line-length = 100
+
+[lint]
+# Keep basic correctness checks.
+select = ["E", "F"]
+# Allow multi-import lines and one-line 'if: return' for now.
+ignore = ["E401", "E701"]
+
+# Safety valve (you can remove later when not needed)
+per-file-ignores = { "bot.py" = ["F401"] }
