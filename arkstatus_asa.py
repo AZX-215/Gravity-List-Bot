@@ -3,9 +3,14 @@
 # Near real-time ASA server widgets with polite rate limiting and persistent dashboard.
 
 from __future__ import annotations
-import os, json, asyncio, time, datetime as dt
+
+import os
+import json
+import asyncio
+import time
+import datetime as dt
 from pathlib import Path
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional
 from urllib.parse import quote
 
 import aiohttp
@@ -128,8 +133,10 @@ DOTS = {"online": "🟢", "offline": "🔴", "dead": "⚫️", "unknown": "⚪�
 
 def _status_color(status: Optional[str]) -> int:
     s = (status or "unknown").lower()
-    if s == "online": return OK_GREEN
-    if s in ("offline","dead"): return ERR_RED
+    if s == "online":
+        return OK_GREEN
+    if s in ("offline", "dead"):
+        return ERR_RED
     return WARN_YELLOW
 
 def _dot(status: Optional[str]) -> str:
@@ -137,7 +144,8 @@ def _dot(status: Optional[str]) -> str:
 
 def _pct(num: Optional[int], den: Optional[int]) -> int:
     try:
-        if not den: return 0
+        if not den:
+            return 0
         return max(0, min(100, int(round((num or 0) * 100 / den))))
     except Exception:
         return 0
@@ -145,7 +153,8 @@ def _pct(num: Optional[int], den: Optional[int]) -> int:
 def bar(current: Optional[int], maximum: Optional[int], width: int = 22) -> str:
     cur = max(0, int(current or 0))
     mx  = max(cur, int(maximum or 0))
-    if mx <= 0: return "—"
+    if mx <= 0:
+        return "—"
     filled = int(round((cur / mx) * width))
     return "▰" * filled + "▱" * (width - filled)
 
@@ -190,7 +199,8 @@ def build_embed(s: Dict[str, Any]) -> discord.Embed:
     desc += f"{usage}  **{pct_i}%**\n"
     # Meta line
     meta_bits = [f"Platform: `{platform}`", f"Mode: `{mode}`", f"Version: `{ver}`", f"Ping: `{ping}`"]
-    if isinstance(day, int): meta_bits.append(f"Day: `{day}`")
+    if isinstance(day, int):
+        meta_bits.append(f"Day: `{day}`")
     desc += " • ".join(meta_bits)
 
     embed = discord.Embed(title=full_title, description=desc, color=color)
@@ -226,8 +236,10 @@ def build_embed(s: Dict[str, Any]) -> discord.Embed:
     # Timestamps (if provided by API)
     if updated or last_ss:
         when = []
-        if updated: when.append(f"Updated: `{updated}`")
-        if last_ss: when.append(f"Snapshot: `{last_ss}`")
+        if updated:
+            when.append(f"Updated: `{updated}`")
+        if last_ss:
+            when.append(f"Snapshot: `{last_ss}`")
         embed.add_field(name="Data times", value="\n".join(when), inline=False)
 
     return embed
