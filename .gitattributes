@@ -1,0 +1,4 @@
+.github export-ignore
+tests  export-ignore
+venv   export-ignore
+lists  export-ignore
