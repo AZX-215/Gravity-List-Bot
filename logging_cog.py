@@ -55,9 +55,12 @@ def _fmt_duration(seconds: float) -> str:
     h, rem = divmod(rem, 3600)
     m, s = divmod(rem, 60)
     parts = []
-    if d: parts.append(f"{d}d")
-    if h: parts.append(f"{h}h")
-    if m: parts.append(f"{m}m")
+    if d:
+        parts.append(f"{d}d")
+    if h:
+        parts.append(f"{h}h")
+    if m:
+        parts.append(f"{m}m")
     if not parts:
         parts.append(f"{s}s")
     return " ".join(parts)
@@ -172,7 +175,7 @@ class LoggingCog(commands.Cog):
     async def on_ready(self):
         logging.getLogger().info("🤖 Bot is ready")
 
-    @commands.Cog.listener()
+    @commands.Cog.listener())
     async def on_disconnect(self):
         # Don't spam the root logger; just a debug trace.
         logging.getLogger().debug("Gateway disconnect detected")
