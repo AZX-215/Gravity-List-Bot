@@ -1,9 +1,41 @@
+# ── VCS & meta
 .git
 .gitignore
+.github/
+
+# ── Secrets & env
 .env
 .env.*
-lists/
-venv/
-__pycache__/
-*.py[cod]
+.envrc
+
+# ── Editor/IDE
+.vscode/
+.idea/
 .vs/
+
+# ── Python caches & tooling
+**/__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# ── Virtual envs
+venv/
+.venv/
+
+# ── Build / dist artifacts
+build/
+dist/
+*.egg-info/
+
+# ── App runtime data (mount as a volume in prod)
+lists/
+gen_lists/
+logs/
+tmp/
+*.db
+*.sqlite
+*.log
