@@ -54,7 +54,8 @@ def setup_screenshot_api(bot):
             item = await queue.get()
             try:
                 channel = bot.get_channel(item["channel_id"]) or await bot.fetch_channel(item["channel_id"])
-                bio = io.BytesIO(item["bytes"]); bio.seek(0)
+                bio = io.BytesIO(item["bytes"])
+                bio.seek(0)
                 await channel.send(content=item["caption"], file=DFile(bio, filename=item["filename"]))
                 await asyncio.sleep(1.5)  # gentle spacing for rate limits
             except Exception as e:
