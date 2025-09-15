@@ -1,40 +1,45 @@
-name: release
+name: Release
+
 on:
   push:
     tags:
       - "v*.*.*"
 
 permissions:
-  contents: write   # needed to create/upload the release
+  contents: write   # required to create a release & upload assets
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   build-and-release:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout (full history + tags)
+        uses: actions/checkout@v4
         with:
-          fetch-depth: 0   # so release notes can see prior tags/commits
+          fetch-depth: 0   # needed so the tag exists locally
 
-      - name: Derive version from tag
+      - name: Set up Python (for any light scripting if needed)
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # Build a source ZIP from the tagged commit, honoring .gitattributes export-ignore
+      - name: Build source archive
         run: |
-          echo "TAG=${GITHUB_REF_NAME}" >> $GITHUB_ENV
-          echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_ENV
+          set -euo pipefail
+          echo "Tag: $GITHUB_REF_NAME"
+          git archive --format=zip -o "Gravity-List-Bot-${GITHUB_REF_NAME}.zip" "$GITHUB_REF_NAME"
+          sha256sum "Gravity-List-Bot-${GITHUB_REF_NAME}.zip" > "Gravity-List-Bot-${GITHUB_REF_NAME}.zip.sha256"
+          ls -lh
 
-      - name: Make zipped distribution
-        run: |
-          mkdir -p dist
-          NAME="Gravity-List-Bot-v${VERSION}"
-          # zip everything except dev/ci-only bits
-          zip -r "dist/${NAME}.zip" . \
-            -x "*.git*" "venv/*" "__pycache__/*" "lists/*" ".github/*"
-          sha256sum "dist/${NAME}.zip" > "dist/${NAME}.sha256"
-
-      - name: Create GitHub Release
+      - name: Create GitHub release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ env.TAG }}
-          name: ${{ env.TAG }}
           generate_release_notes: true
           files: |
-            dist/*.zip
-            dist/*.sha256
+            Gravity-List-Bot-${{ github.ref_name }}.zip
+            Gravity-List-Bot-${{ github.ref_name }}.zip.sha256
