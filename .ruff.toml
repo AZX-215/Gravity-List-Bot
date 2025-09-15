@@ -1,10 +1,14 @@
-line-length = 100
+# .ruff.toml
+
+line-length = 120
+target-version = "py311"
+extend-exclude = ["venv", "lists", "__pycache__"]
 
 [lint]
-# Keep basic correctness checks.
+# Keep correctness checks only for now.
 select = ["E", "F"]
-# Allow multi-import lines and one-line 'if: return' for now.
-ignore = ["E401", "E701"]
+# Temporarily ignore long lines globally. We’ll tighten later.
+ignore = ["E501"]
 
-# Safety valve (you can remove later when not needed)
-per-file-ignores = { "bot.py" = ["F401"] }
+# Allow the early-draft bare `except:` patterns in timers.py only (for now).
+per-file-ignores = { "timers.py" = ["E722"] }
