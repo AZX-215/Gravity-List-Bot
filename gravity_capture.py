@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import os
-import asyncio
 from typing import Optional, Dict, Any
 
 import discord
