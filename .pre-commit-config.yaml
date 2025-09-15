@@ -1,5 +1,4 @@
 repos:
-  # Basic hygiene (newline at EOF, no stray whitespace, valid YAML)
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.6.0
     hooks:
@@ -7,14 +6,12 @@ repos:
       - id: trailing-whitespace
       - id: check-yaml
 
-  # Ruff: fast lint + safe auto-fixes
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.13.0
     hooks:
       - id: ruff
-        args: [--fix]     # safely fixes E/F rules like E701/E702, etc.
+        args: [--fix]
 
-  # Black: formatting (kept last so it formats after ruff edits)
   - repo: https://github.com/psf/black
     rev: 25.1.0
     hooks:
