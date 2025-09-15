@@ -178,25 +178,32 @@ def _normalize_gen_items(doc: Dict[str, Any]) -> bool:
                 continue
 
         # required keys with defaults
-        if "type" not in it:            it["type"] = "Tek"; changed = True
-        if "name" not in it:            it["name"] = "Unknown"; changed = True
+if "type" not in it:
+    it["type"] = "Tek"
+    changed = True
 
-        # Tek fields
-        if "element" not in it:         it["element"] = 0; changed = True
-        if "shards" not in it:          it["shards"] = 0; changed = True
+if "name" not in it:
+    it["name"] = "Unknown"
+    changed = True
 
-        # Electrical fields
-        if "gas" not in it:             it["gas"] = 0; changed = True
-        if "imbued" not in it:          it["imbued"] = 0; changed = True
+# Tek fields
+if "element" not in it:
+    it["element"] = 0
+    changed = True
 
-        # timing / alerts
-        if "timestamp" not in it:       it["timestamp"] = time.time(); changed = True
-        if "alerted_low" not in it:     it["alerted_low"] = False; changed = True
-        if "alerted_empty" not in it:   it["alerted_empty"] = False; changed = True
+if "shards" not in it:
+    it["shards"] = 0
+    changed = True
 
-        # optional metadata
-        if "notes" not in it:           it["notes"] = ""; changed = True
-        if "alerts_muted" not in it:    it["alerts_muted"] = False; changed = True
+# Electrical fields
+if "gas" not in it:
+    it["gas"] = 0
+    changed = True
+
+if "imbued" not in it:
+    it["imbued"] = 0
+    changed = True
+
 
         normalized_items.append(it)
 
