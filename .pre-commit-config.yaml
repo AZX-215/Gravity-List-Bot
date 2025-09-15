@@ -5,6 +5,13 @@ repos:
       - id: end-of-file-fixer
       - id: trailing-whitespace
       - id: check-yaml
+      - id: check-json
+      - id: check-toml
+      - id: check-merge-conflict
+      - id: check-case-conflict
+      - id: mixed-line-ending
+      - id: detect-private-key
+      - id: check-added-large-files   # warns on >5MB files by default
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.13.0
@@ -16,3 +23,4 @@ repos:
     rev: 25.1.0
     hooks:
       - id: black
+        language_version: python3.11

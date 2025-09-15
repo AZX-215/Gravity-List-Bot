@@ -12,3 +12,10 @@ venv/
 
 # IDE
 .vs/
+
+# Runtime data folder: keep directory ignored, but allow seed files
+lists/**
+!lists/
+!lists/.gitkeep
+!lists/data.json
+!lists/dashboards.json
