@@ -17,6 +17,7 @@ from discord import File as DFile
 # event loop before discord.py is running). bot.py awaits the returned
 # start_worker coroutine inside on_ready.
 
+
 def setup_screenshot_api(bot):
     """
     Create FastAPI app and return (app, start_worker) where start_worker is an
@@ -40,12 +41,15 @@ def setup_screenshot_api(bot):
             raise HTTPException(401, "Unauthorized (bad key)")
 
         data = await file.read()
-        await queue.put({
-            "bytes": data,
-            "filename": file.filename or f"screenshot_{int(time.time())}.jpg",
-            "channel_id": channel_id or DEFAULT_CH,
-            "caption": caption or f"Screenshot {datetime.fromtimestamp(ts or time.time(), tz=timezone.utc).astimezone().isoformat(timespec='seconds')}",
-        })
+        await queue.put(
+            {
+                "bytes": data,
+                "filename": file.filename or f"screenshot_{int(time.time())}.jpg",
+                "channel_id": channel_id or DEFAULT_CH,
+                "caption": caption
+                or f"Screenshot {datetime.fromtimestamp(ts or time.time(), tz=timezone.utc).astimezone().isoformat(timespec='seconds')}",
+            }
+        )
         return {"queued": True}
 
     async def worker():
@@ -53,10 +57,14 @@ def setup_screenshot_api(bot):
         while True:
             item = await queue.get()
             try:
-                channel = bot.get_channel(item["channel_id"]) or await bot.fetch_channel(item["channel_id"])
+                channel = bot.get_channel(item["channel_id"]) or await bot.fetch_channel(
+                    item["channel_id"]
+                )
                 bio = io.BytesIO(item["bytes"])
                 bio.seek(0)
-                await channel.send(content=item["caption"], file=DFile(bio, filename=item["filename"]))
+                await channel.send(
+                    content=item["caption"], file=DFile(bio, filename=item["filename"])
+                )
                 await asyncio.sleep(1.5)  # gentle spacing for rate limits
             except Exception as e:
                 print(f"[screenshot-worker] {e}")

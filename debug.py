@@ -42,6 +42,7 @@ STATE_PATH = Path(
     or os.path.join(BASE_DIR, "runtime_state.json")
 )
 
+
 # ----------------------------- tiny JSON store --------------------------------
 def _ensure_dir(p: Path) -> None:
     p.parent.mkdir(parents=True, exist_ok=True)
@@ -363,11 +364,18 @@ class DebugCog(commands.Cog):
             await interaction.response.send_message("✅ Cleared override (stored).", ephemeral=True)
         else:
             STATE.set_cfg("disconnect_threshold_sec", int(seconds))
-            await interaction.response.send_message(f"✅ Stored override set to {seconds}s.", ephemeral=True)
+            await interaction.response.send_message(
+                f"✅ Stored override set to {seconds}s.", ephemeral=True
+            )
 
-    @diag.command(name="maintenance", description="Set maintenance mode flag (does not alter current logging).")
+    @diag.command(
+        name="maintenance",
+        description="Set maintenance mode flag (does not alter current logging).",
+    )
     @app_commands.describe(on="True to enable, False to disable", note="Optional note")
-    async def maintenance(self, interaction: discord.Interaction, on: bool, note: Optional[str] = None):
+    async def maintenance(
+        self, interaction: discord.Interaction, on: bool, note: Optional[str] = None
+    ):
         STATE.set("maintenance", bool(on))
         if note is not None:
             STATE.set("maintenance_note", str(note))
@@ -383,7 +391,9 @@ class DebugCog(commands.Cog):
             ephemeral=True,
         )
 
-    @diag.command(name="tail_logs", description="Show the last N log lines observed by the bot (in-memory).")
+    @diag.command(
+        name="tail_logs", description="Show the last N log lines observed by the bot (in-memory)."
+    )
     @app_commands.describe(lines="How many lines (default 50, max 150)")
     async def tail_logs(self, interaction: discord.Interaction, lines: Optional[int] = 50):
         n = max(1, min(int(lines or 50), 150))

@@ -21,7 +21,9 @@ from data_manager import (
 )
 
 # ─── Configuration ──────────────────────
-TEK_THUMBNAIL = "https://raw.githubusercontent.com/AZX-215/Gravity-List-Bot/main/images/Tek_Generator.png"
+TEK_THUMBNAIL = (
+    "https://raw.githubusercontent.com/AZX-215/Gravity-List-Bot/main/images/Tek_Generator.png"
+)
 TEK_COLOR = 0x0099FF
 ELEC_COLOR = 0xFFC300
 GEN_EMOJIS = {"Tek": "⚡", "Electrical": "🔌"}
@@ -187,9 +189,13 @@ async def refresh_dashboard(bot: commands.Bot, list_name: str):
     except discord.NotFound:
         sent = await ch.send(embed=embed)
         save_gen_dashboard_id(list_name, ch.id, sent.id)
-        await log_to_channel(bot, f"ℹ️ Recreated missing gen dashboard for `{list_name}` in <#{ch_id}>.")
+        await log_to_channel(
+            bot, f"ℹ️ Recreated missing gen dashboard for `{list_name}` in <#{ch_id}>."
+        )
     except discord.Forbidden:
-        await log_to_channel(bot, f"❌ Missing permissions to edit gen dashboard for `{list_name}` in <#{ch_id}>.")
+        await log_to_channel(
+            bot, f"❌ Missing permissions to edit gen dashboard for `{list_name}` in <#{ch_id}>."
+        )
     except discord.HTTPException as e:
         await log_to_channel(bot, f"⚠️ Failed to update gen dashboard `{list_name}`: {e}")
 
@@ -332,7 +338,9 @@ def build_gen_embed(list_name: str) -> discord.Embed:
     _add_chunked_fields(embed, lines, base_name="Generators")
 
     # Signature + local-time update at the BOTTOM
-    embed.add_field(name="​", value=f"*Powered by AZX*\nUpdated <t:{int(time.time())}:f>", inline=False)
+    embed.add_field(
+        name="​", value=f"*Powered by AZX*\nUpdated <t:{int(time.time())}:f>", inline=False
+    )
 
     return embed
 
@@ -364,7 +372,8 @@ class GeneratorCog(commands.Cog):
                 if getattr(e, "status", None) == 429:
                     self.backoff_until = time.time() + BACKOFF_SECONDS
                     await log_to_channel(
-                        self.bot, f"⚠️ Rate limit hit on `{name}`, pausing for {BACKOFF_SECONDS//60}m."
+                        self.bot,
+                        f"⚠️ Rate limit hit on `{name}`, pausing for {BACKOFF_SECONDS//60}m.",
                     )
             except Exception as e:
                 await log_to_channel(self.bot, f"⚠️ generator_list_loop error on `{name}`: {e}")
@@ -383,21 +392,30 @@ class GeneratorCog(commands.Cog):
                 f"⚠️ Generator list `{name}` already exists.", ephemeral=True
             )
         save_gen_list(name, [])
-        await interaction.response.send_message(f"✅ Created generator list `{name}`.", ephemeral=True)
+        await interaction.response.send_message(
+            f"✅ Created generator list `{name}`.", ephemeral=True
+        )
         await refresh_dashboard(self.bot, name)
 
     @app_commands.command(name="delete_gen_list", description="Delete a generator list")
     @app_commands.describe(name="Name of generator list to delete")
     async def delete_gen_list_cmd(self, interaction: discord.Interaction, name: str):
         if not gen_list_exists(name):
-            return await interaction.response.send_message(f"❌ `{name}` not found.", ephemeral=True)
+            return await interaction.response.send_message(
+                f"❌ `{name}` not found.", ephemeral=True
+            )
         delete_gen_list(name)
-        await interaction.response.send_message(f"🗑️ Deleted generator list `{name}`.", ephemeral=True)
+        await interaction.response.send_message(
+            f"🗑️ Deleted generator list `{name}`.", ephemeral=True
+        )
         await refresh_dashboard(self.bot, name)
 
     @app_commands.command(name="add_gen_tek", description="Add a Tek generator")
     @app_commands.describe(
-        list_name="Generator list", gen_name="Generator name", element="Element count", shards="Shard count"
+        list_name="Generator list",
+        gen_name="Generator name",
+        element="Element count",
+        shards="Shard count",
     )
     async def add_gen_tek(
         self,
@@ -408,17 +426,26 @@ class GeneratorCog(commands.Cog):
         shards: int = 0,
     ):
         if not gen_list_exists(list_name):
-            return await interaction.response.send_message(f"❌ `{list_name}` not found.", ephemeral=True)
+            return await interaction.response.send_message(
+                f"❌ `{list_name}` not found.", ephemeral=True
+            )
         data = load_gen_list(list_name)
         if any(g.get("name", "").lower() == gen_name.lower() for g in data):
-            return await interaction.response.send_message(f"❌ Generator `{gen_name}` already exists.", ephemeral=True)
+            return await interaction.response.send_message(
+                f"❌ Generator `{gen_name}` already exists.", ephemeral=True
+            )
         add_to_gen_list(list_name, gen_name, "Tek", element, shards, 0, 0)
-        await interaction.response.send_message(f"✅ Added Tek generator `{gen_name}`.", ephemeral=True)
+        await interaction.response.send_message(
+            f"✅ Added Tek generator `{gen_name}`.", ephemeral=True
+        )
         await refresh_dashboard(self.bot, list_name)
 
     @app_commands.command(name="add_gen_electrical", description="Add an Electrical generator")
     @app_commands.describe(
-        list_name="Generator list", gen_name="Generator name", gas="Gas count", imbued="Imbued gas count"
+        list_name="Generator list",
+        gen_name="Generator name",
+        gas="Gas count",
+        imbued="Imbued gas count",
     )
     async def add_gen_electrical(
         self,
@@ -429,17 +456,26 @@ class GeneratorCog(commands.Cog):
         imbued: int = 0,
     ):
         if not gen_list_exists(list_name):
-            return await interaction.response.send_message(f"❌ `{list_name}` not found.", ephemeral=True)
+            return await interaction.response.send_message(
+                f"❌ `{list_name}` not found.", ephemeral=True
+            )
         data = load_gen_list(list_name)
         if any(g.get("name", "").lower() == gen_name.lower() for g in data):
-            return await interaction.response.send_message(f"❌ Generator `{gen_name}` already exists.", ephemeral=True)
+            return await interaction.response.send_message(
+                f"❌ Generator `{gen_name}` already exists.", ephemeral=True
+            )
         add_to_gen_list(list_name, gen_name, "Electrical", 0, 0, gas, imbued)
-        await interaction.response.send_message(f"✅ Added Electrical generator `{gen_name}`.", ephemeral=True)
+        await interaction.response.send_message(
+            f"✅ Added Electrical generator `{gen_name}`.", ephemeral=True
+        )
         await refresh_dashboard(self.bot, list_name)
 
     @app_commands.command(name="edit_gen_tek", description="Edit a Tek generator entry")
     @app_commands.describe(
-        list_name="Generator list", gen_name="Generator to edit", element="New element count", shards="New shard count"
+        list_name="Generator list",
+        gen_name="Generator to edit",
+        element="New element count",
+        shards="New shard count",
     )
     async def edit_gen_tek(
         self,
@@ -450,7 +486,9 @@ class GeneratorCog(commands.Cog):
         shards: int,
     ):
         if not gen_list_exists(list_name):
-            return await interaction.response.send_message(f"❌ `{list_name}` not found.", ephemeral=True)
+            return await interaction.response.send_message(
+                f"❌ `{list_name}` not found.", ephemeral=True
+            )
         data = load_gen_list(list_name)
         for item in data:
             if item.get("name") == gen_name and item.get("type") == "Tek":
@@ -460,7 +498,9 @@ class GeneratorCog(commands.Cog):
                 item["alerted_low"] = False
                 item["alerted_empty"] = False
                 save_gen_list(list_name, data)
-                await interaction.response.send_message(f"✅ Updated Tek generator `{gen_name}`.", ephemeral=True)
+                await interaction.response.send_message(
+                    f"✅ Updated Tek generator `{gen_name}`.", ephemeral=True
+                )
                 try:
                     await refresh_dashboard(self.bot, list_name)
                 except Exception as e:
@@ -468,11 +508,18 @@ class GeneratorCog(commands.Cog):
                         self.bot, f"⚠️ refresh_dashboard failed for `{list_name}` after edit: {e}"
                     )
                 return
-        await interaction.response.send_message(f"❌ Tek generator `{gen_name}` not found.", ephemeral=True)
+        await interaction.response.send_message(
+            f"❌ Tek generator `{gen_name}` not found.", ephemeral=True
+        )
 
-    @app_commands.command(name="edit_gen_electrical", description="Edit an Electrical generator entry")
+    @app_commands.command(
+        name="edit_gen_electrical", description="Edit an Electrical generator entry"
+    )
     @app_commands.describe(
-        list_name="Generator list", gen_name="Generator to edit", gas="New gas count", imbued="New imbued gas count"
+        list_name="Generator list",
+        gen_name="Generator to edit",
+        gas="New gas count",
+        imbued="New imbued gas count",
     )
     async def edit_gen_electrical(
         self,
@@ -483,7 +530,9 @@ class GeneratorCog(commands.Cog):
         imbued: int,
     ):
         if not gen_list_exists(list_name):
-            return await interaction.response.send_message(f"❌ `{list_name}` not found.", ephemeral=True)
+            return await interaction.response.send_message(
+                f"❌ `{list_name}` not found.", ephemeral=True
+            )
         data = load_gen_list(list_name)
         for item in data:
             if item.get("name") == gen_name and item.get("type") == "Electrical":
@@ -499,7 +548,9 @@ class GeneratorCog(commands.Cog):
                 await refresh_dashboard(self.bot, list_name)
                 return
 
-        await interaction.response.send_message(f"❌ Electrical generator `{gen_name}` not found.", ephemeral=True)
+        await interaction.response.send_message(
+            f"❌ Electrical generator `{gen_name}` not found.", ephemeral=True
+        )
 
     # ─── Bulk update all Tek gens in a list ─────────────────────────────────────
     @app_commands.command(
@@ -515,11 +566,15 @@ class GeneratorCog(commands.Cog):
         self, interaction: discord.Interaction, list_name: str, element: int, shards: int
     ):
         if not gen_list_exists(list_name):
-            return await interaction.response.send_message(f"❌ `{list_name}` not found.", ephemeral=True)
+            return await interaction.response.send_message(
+                f"❌ `{list_name}` not found.", ephemeral=True
+            )
 
         data = load_gen_list(list_name)
         if not data:
-            return await interaction.response.send_message(f"⚠️ `{list_name}` is empty.", ephemeral=True)
+            return await interaction.response.send_message(
+                f"⚠️ `{list_name}` is empty.", ephemeral=True
+            )
 
         now = time.time()
         updated = 0
@@ -563,7 +618,9 @@ class GeneratorCog(commands.Cog):
         self, interaction: discord.Interaction, list_name: str, gas: int = -1, imbued: int = -1
     ):
         if not gen_list_exists(list_name):
-            return await interaction.response.send_message(f"❌ `{list_name}` not found.", ephemeral=True)
+            return await interaction.response.send_message(
+                f"❌ `{list_name}` not found.", ephemeral=True
+            )
 
         if gas < 0 and imbued < 0:
             return await interaction.response.send_message(
@@ -572,7 +629,9 @@ class GeneratorCog(commands.Cog):
 
         data = load_gen_list(list_name)
         if not data:
-            return await interaction.response.send_message(f"⚠️ `{list_name}` is empty.", ephemeral=True)
+            return await interaction.response.send_message(
+                f"⚠️ `{list_name}` is empty.", ephemeral=True
+            )
 
         now = time.time()
         updated = 0
@@ -611,29 +670,40 @@ class GeneratorCog(commands.Cog):
             await refresh_dashboard(self.bot, list_name)
         except Exception as e:
             await log_to_channel(
-                self.bot, f"⚠️ refresh_dashboard failed for `{list_name}` after bulk Elec update: {e}"
+                self.bot,
+                f"⚠️ refresh_dashboard failed for `{list_name}` after bulk Elec update: {e}",
             )
 
     @app_commands.command(name="remove_gen", description="Remove a generator entry")
     @app_commands.describe(list_name="Generator list", gen_name="Generator to remove")
     async def remove_gen(self, interaction: discord.Interaction, list_name: str, gen_name: str):
         if not gen_list_exists(list_name):
-            return await interaction.response.send_message(f"❌ `{list_name}` not found.", ephemeral=True)
+            return await interaction.response.send_message(
+                f"❌ `{list_name}` not found.", ephemeral=True
+            )
         data = load_gen_list(list_name)
         new_data = [i for i in data if i.get("name") != gen_name]
         if len(new_data) == len(data):
-            return await interaction.response.send_message(f"❌ Generator `{gen_name}` not found.", ephemeral=True)
+            return await interaction.response.send_message(
+                f"❌ Generator `{gen_name}` not found.", ephemeral=True
+            )
         save_gen_list(list_name, new_data)
         await interaction.response.send_message(f"🗑️ Removed `{gen_name}`.", ephemeral=True)
         await refresh_dashboard(self.bot, list_name)
 
     @app_commands.command(name="reorder_gen", description="Reorder generator entries by index")
     @app_commands.describe(
-        list_name="Generator list", from_index="Current position (1-based)", to_index="New position (1-based)"
+        list_name="Generator list",
+        from_index="Current position (1-based)",
+        to_index="New position (1-based)",
     )
-    async def reorder_gen(self, interaction: discord.Interaction, list_name: str, from_index: int, to_index: int):
+    async def reorder_gen(
+        self, interaction: discord.Interaction, list_name: str, from_index: int, to_index: int
+    ):
         if not gen_list_exists(list_name):
-            return await interaction.response.send_message(f"❌ `{list_name}` not found.", ephemeral=True)
+            return await interaction.response.send_message(
+                f"❌ `{list_name}` not found.", ephemeral=True
+            )
         data = load_gen_list(list_name)
         if not (1 <= from_index <= len(data)) or not (1 <= to_index <= len(data)):
             return await interaction.response.send_message("❌ Index out of range.", ephemeral=True)
@@ -645,35 +715,63 @@ class GeneratorCog(commands.Cog):
         )
         await refresh_dashboard(self.bot, list_name)
 
-    @app_commands.command(name="set_gen_role", description="Set a role to ping when low or expiring soon")
+    @app_commands.command(
+        name="set_gen_role", description="Set a role to ping when low or expiring soon"
+    )
     @app_commands.describe(list_name="Generator list", role="Role to ping on low fuel/expiry")
-    async def set_gen_role(self, interaction: discord.Interaction, list_name: str, role: discord.Role):
+    async def set_gen_role(
+        self, interaction: discord.Interaction, list_name: str, role: discord.Role
+    ):
         if not gen_list_exists(list_name):
-            return await interaction.response.send_message(f"❌ `{list_name}` not found.", ephemeral=True)
+            return await interaction.response.send_message(
+                f"❌ `{list_name}` not found.", ephemeral=True
+            )
         set_gen_list_role(list_name, role.id)
-        await interaction.response.send_message(f"✅ Ping role set for `{list_name}`.", ephemeral=True)
+        await interaction.response.send_message(
+            f"✅ Ping role set for `{list_name}`.", ephemeral=True
+        )
 
     # NEW: mute/unmute per-gen alerts
-    @app_commands.command(name="mute_gen_alerts", description="Mute LOW/EMPTY alert pings for a generator")
+    @app_commands.command(
+        name="mute_gen_alerts", description="Mute LOW/EMPTY alert pings for a generator"
+    )
     @app_commands.describe(list_name="Generator list", gen_name="Generator to mute")
-    async def mute_gen_alerts(self, interaction: discord.Interaction, list_name: str, gen_name: str):
+    async def mute_gen_alerts(
+        self, interaction: discord.Interaction, list_name: str, gen_name: str
+    ):
         if not gen_list_exists(list_name):
-            return await interaction.response.send_message(f"❌ `{list_name}` not found.", ephemeral=True)
+            return await interaction.response.send_message(
+                f"❌ `{list_name}` not found.", ephemeral=True
+            )
         ok = set_gen_item_alerts_muted(list_name, gen_name, True)
         if not ok:
-            return await interaction.response.send_message(f"❌ Generator `{gen_name}` not found.", ephemeral=True)
-        await interaction.response.send_message(f"🔕 Alerts muted for `{gen_name}`.", ephemeral=True)
+            return await interaction.response.send_message(
+                f"❌ Generator `{gen_name}` not found.", ephemeral=True
+            )
+        await interaction.response.send_message(
+            f"🔕 Alerts muted for `{gen_name}`.", ephemeral=True
+        )
         await refresh_dashboard(self.bot, list_name)
 
-    @app_commands.command(name="unmute_gen_alerts", description="Unmute LOW/EMPTY alert pings for a generator")
+    @app_commands.command(
+        name="unmute_gen_alerts", description="Unmute LOW/EMPTY alert pings for a generator"
+    )
     @app_commands.describe(list_name="Generator list", gen_name="Generator to unmute")
-    async def unmute_gen_alerts(self, interaction: discord.Interaction, list_name: str, gen_name: str):
+    async def unmute_gen_alerts(
+        self, interaction: discord.Interaction, list_name: str, gen_name: str
+    ):
         if not gen_list_exists(list_name):
-            return await interaction.response.send_message(f"❌ `{list_name}` not found.", ephemeral=True)
+            return await interaction.response.send_message(
+                f"❌ `{list_name}` not found.", ephemeral=True
+            )
         ok = set_gen_item_alerts_muted(list_name, gen_name, False)
         if not ok:
-            return await interaction.response.send_message(f"❌ Generator `{gen_name}` not found.", ephemeral=True)
-        await interaction.response.send_message(f"🔔 Alerts unmuted for `{gen_name}`.", ephemeral=True)
+            return await interaction.response.send_message(
+                f"❌ Generator `{gen_name}` not found.", ephemeral=True
+            )
+        await interaction.response.send_message(
+            f"🔔 Alerts unmuted for `{gen_name}`.", ephemeral=True
+        )
         await refresh_dashboard(self.bot, list_name)
 
 

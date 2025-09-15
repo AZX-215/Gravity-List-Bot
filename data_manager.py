@@ -11,7 +11,9 @@ LISTS_DIR = os.path.join(BASE_DIR, "lists")
 DASHBOARDS_PATH = os.getenv("DASHBOARDS_PATH") or os.path.join(BASE_DIR, "dashboards.json")
 
 GEN_LISTS_DIR = os.path.join(BASE_DIR, "generator_lists")
-GEN_DASHBOARDS_PATH = os.getenv("GEN_DASHBOARDS_PATH") or os.path.join(BASE_DIR, "generator_dashboards.json")
+GEN_DASHBOARDS_PATH = os.getenv("GEN_DASHBOARDS_PATH") or os.path.join(
+    BASE_DIR, "generator_dashboards.json"
+)
 
 TIMERS_PATH = os.path.join(BASE_DIR, "timers.json")
 
@@ -351,7 +353,9 @@ def save_gen_dashboard_id(list_name: str, channel_id: int, message_id: int) -> N
 
 
 # ─────────────────────────── Per-item helpers ────────────────────────────
-def _find_gen_item(doc: Dict[str, Any], gen_name: str) -> Tuple[Optional[int], Optional[Dict[str, Any]]]:
+def _find_gen_item(
+    doc: Dict[str, Any], gen_name: str
+) -> Tuple[Optional[int], Optional[Dict[str, Any]]]:
     items = doc.get("items", [])
     for idx, it in enumerate(items):
         if it.get("name", "").lower() == gen_name.lower():

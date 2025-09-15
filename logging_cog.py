@@ -9,13 +9,16 @@ from discord.ext import commands
 # Optional: read runtime state/overrides from the non-invasive debug module
 # If debug.py isn't loaded, DEBUG_STATE stays None and we just skip extras.
 try:
-    from debug import STATE as DEBUG_STATE  # provides get_cfg(), get(), record_shutdown(), push_event()
+    from debug import (
+        STATE as DEBUG_STATE,
+    )  # provides get_cfg(), get(), record_shutdown(), push_event()
 except Exception:
     DEBUG_STATE = None
 
 
 class DiscordLogHandler(logging.Handler):
     """Buffers log records and periodically sends them to a Discord channel."""
+
     def __init__(self, bot, channel_id, level=logging.INFO, interval=10):
         super().__init__(level)
         self.bot = bot
@@ -68,6 +71,7 @@ def _fmt_duration(seconds: float) -> str:
 
 class LoggingCog(commands.Cog):
     """Cog to send INFO+ logs to a Discord channel and track key events, with gated disconnect alerts."""
+
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
@@ -89,17 +93,15 @@ class LoggingCog(commands.Cog):
 
         # Disconnect gating (env default; may be overridden by debug.py state)
         self._env_threshold = int(os.getenv("DISCONNECT_ALERT_THRESHOLD_SEC", "300") or "300")
-        self._disconnect_since = None      # type: float | None
-        self._disconnect_task = None       # type: asyncio.Task | None
+        self._disconnect_since = None  # type: float | None
+        self._disconnect_task = None  # type: asyncio.Task | None
 
         # Planned shutdown / maintenance flags
         self._planned_shutdown_flag = False
 
         # Optional Railway metadata for nicer state recording
         self._deployment_id = (
-            os.getenv("RAILWAY_DEPLOYMENT_ID")
-            or os.getenv("RAILWAY_BUILD_ID")
-            or ""
+            os.getenv("RAILWAY_DEPLOYMENT_ID") or os.getenv("RAILWAY_BUILD_ID") or ""
         )
         self._git_sha = (os.getenv("RAILWAY_GIT_COMMIT_SHA", "") or "")[:7]
         self._git_branch = os.getenv("RAILWAY_GIT_BRANCH", "") or ""
@@ -147,7 +149,11 @@ class LoggingCog(commands.Cog):
         """After threshold, if still disconnected and not planned/maintenance, send one alert."""
         try:
             await asyncio.sleep(self._threshold())
-            if self._disconnect_since is not None and not self._planned_shutdown_flag and not self._maintenance_on():
+            if (
+                self._disconnect_since is not None
+                and not self._planned_shutdown_flag
+                and not self._maintenance_on()
+            ):
                 started = int(self._disconnect_since)
                 mins = self._threshold() // 60
                 await self._send_log(
@@ -164,7 +170,9 @@ class LoggingCog(commands.Cog):
         self._planned_shutdown_flag = True
         if DEBUG_STATE is not None:
             try:
-                DEBUG_STATE.record_shutdown("redeploy", self._deployment_id, self._git_sha, self._git_branch)
+                DEBUG_STATE.record_shutdown(
+                    "redeploy", self._deployment_id, self._git_sha, self._git_branch
+                )
                 DEBUG_STATE.push_event("shutdown", "SIGTERM (planned redeploy) received")
             except Exception:
                 pass
@@ -197,8 +205,14 @@ class LoggingCog(commands.Cog):
                 self._disconnect_task.cancel()
             self._disconnect_task = None
 
-            if down_for >= self._threshold() and not self._planned_shutdown_flag and not self._maintenance_on():
-                await self._send_log(f"✅ Reconnected to gateway after **{_fmt_duration(down_for)}** of downtime.")
+            if (
+                down_for >= self._threshold()
+                and not self._planned_shutdown_flag
+                and not self._maintenance_on()
+            ):
+                await self._send_log(
+                    f"✅ Reconnected to gateway after **{_fmt_duration(down_for)}** of downtime."
+                )
             # Reset state
             self._disconnect_since = None
 

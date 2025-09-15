@@ -30,6 +30,7 @@ BM_STATE_PATH = Path(os.getenv("BM_STATE_PATH", "./bm_asa_state.json"))  # persi
 
 BM_BASE = "https://api.battlemetrics.com"
 
+
 # ---------- tiny JSON state (server_id -> message_id) ----------
 def _load_state() -> Dict[str, int]:
     if BM_STATE_PATH.exists():
@@ -52,7 +53,9 @@ def _save_state(state: Dict[str, int]) -> None:
 
 
 # ---------- BM API: free-tier server snapshot ----------
-async def get_server_snapshot(server_id: str, api_key: Optional[str] = None) -> Optional[Dict[str, Any]]:
+async def get_server_snapshot(
+    server_id: str, api_key: Optional[str] = None
+) -> Optional[Dict[str, Any]]:
     headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
     url = f"{BM_BASE}/servers/{server_id}"
     timeout = aiohttp.ClientTimeout(total=12)
@@ -184,7 +187,9 @@ class BM_ASA(commands.Cog):
     )
     async def bm_asa_dashboard_start(self, interaction: discord.Interaction):
         if not interaction.user.guild_permissions.manage_guild:
-            await interaction.response.send_message("Manage Server permission required.", ephemeral=True)
+            await interaction.response.send_message(
+                "Manage Server permission required.", ephemeral=True
+            )
             return
         if not BM_SERVER_IDS or not BM_CHANNEL_ID:
             await interaction.response.send_message(
@@ -200,7 +205,9 @@ class BM_ASA(commands.Cog):
     )
     async def bm_asa_dashboard_stop(self, interaction: discord.Interaction):
         if not interaction.user.guild_permissions.manage_guild:
-            await interaction.response.send_message("Manage Server permission required.", ephemeral=True)
+            await interaction.response.send_message(
+                "Manage Server permission required.", ephemeral=True
+            )
             return
         if self._dashboard_loop.is_running():
             self._dashboard_loop.cancel()
@@ -209,11 +216,14 @@ class BM_ASA(commands.Cog):
             await interaction.response.send_message("Dashboard is not running.", ephemeral=True)
 
     @app_commands.command(
-        name="bm_asa_dashboard_refresh", description="(ASA Official) Force a one-time dashboard refresh."
+        name="bm_asa_dashboard_refresh",
+        description="(ASA Official) Force a one-time dashboard refresh.",
     )
     async def bm_asa_dashboard_refresh(self, interaction: discord.Interaction):
         if not interaction.user.guild_permissions.manage_guild:
-            await interaction.response.send_message("Manage Server permission required.", ephemeral=True)
+            await interaction.response.send_message(
+                "Manage Server permission required.", ephemeral=True
+            )
             return
         await interaction.response.defer(ephemeral=True, thinking=True)
         await self._tick(force=True)
@@ -225,7 +235,9 @@ class BM_ASA(commands.Cog):
         if now < self._backoff_until and not force:
             return
         try:
-            channel = self.bot.get_channel(BM_CHANNEL_ID) or await self.bot.fetch_channel(BM_CHANNEL_ID)
+            channel = self.bot.get_channel(BM_CHANNEL_ID) or await self.bot.fetch_channel(
+                BM_CHANNEL_ID
+            )
         except Exception:
             return
 
@@ -245,7 +257,9 @@ class BM_ASA(commands.Cog):
             await self._send_or_edit(channel, sid, embed)
             await asyncio.sleep(1)  # polite spacing
 
-    async def _send_or_edit(self, channel: discord.abc.Messageable, server_id: str, embed: discord.Embed):
+    async def _send_or_edit(
+        self, channel: discord.abc.Messageable, server_id: str, embed: discord.Embed
+    ):
         mid = self.message_ids.get(server_id)
         try:
             if mid:

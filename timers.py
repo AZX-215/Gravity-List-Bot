@@ -5,6 +5,7 @@ from discord.ext import commands, tasks
 from discord import app_commands
 from data_manager import load_timers, add_timer, save_timers, remove_timer
 
+
 class TimerCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
@@ -42,10 +43,7 @@ class TimerCog(commands.Cog):
 
     @app_commands.command(name="create_timer", description="Create a countdown timer")
     @app_commands.describe(
-        name="Timer name",
-        hours="Hours",
-        minutes="Minutes",
-        role="Role to ping when timer expires"
+        name="Timer name", hours="Hours", minutes="Minutes", role="Role to ping when timer expires"
     )
     async def create_timer(
         self,
@@ -53,7 +51,7 @@ class TimerCog(commands.Cog):
         name: str,
         hours: int,
         minutes: int,
-        role: discord.Role = None
+        role: discord.Role = None,
     ):
         total = hours * 3600 + minutes * 60
         end_ts = time.time() + total
@@ -66,7 +64,7 @@ class TimerCog(commands.Cog):
             "paused": False,
             "owner_id": interaction.user.id,
             "role_id": role.id if role else None,
-            "expired": False
+            "expired": False,
         }
         embed = self.build_timer_embed(timer_data)
         await interaction.response.send_message(embed=embed)
@@ -122,17 +120,9 @@ class TimerCog(commands.Cog):
         )
 
     @app_commands.command(name="edit_timer", description="Edit duration of an existing timer")
-    @app_commands.describe(
-        name="Name of timer to edit",
-        hours="New hours",
-        minutes="New minutes"
-    )
+    @app_commands.describe(name="Name of timer to edit", hours="New hours", minutes="New minutes")
     async def edit_timer(
-        self,
-        interaction: discord.Interaction,
-        name: str,
-        hours: int,
-        minutes: int
+        self, interaction: discord.Interaction, name: str, hours: int, minutes: int
     ):
         timers = load_timers()
         for tid, data in timers.items():
@@ -153,9 +143,7 @@ class TimerCog(commands.Cog):
                 return await interaction.response.send_message(
                     f"✏️ Updated timer '{name}' to {hours}h{minutes}m", ephemeral=True
                 )
-        await interaction.response.send_message(
-            f"❌ No timer named '{name}' found", ephemeral=True
-        )
+        await interaction.response.send_message(f"❌ No timer named '{name}' found", ephemeral=True)
 
     @app_commands.command(name="delete_timer", description="Delete a timer")
     @app_commands.describe(name="Name of timer to delete")
@@ -167,9 +155,7 @@ class TimerCog(commands.Cog):
                 return await interaction.response.send_message(
                     f"🗑️ Deleted timer '{name}'", ephemeral=True
                 )
-        await interaction.response.send_message(
-            f"❌ No timer named '{name}' found", ephemeral=True
-        )
+        await interaction.response.send_message(f"❌ No timer named '{name}' found", ephemeral=True)
 
     @tasks.loop(minutes=1)
     async def expiration_loop(self):
@@ -193,6 +179,7 @@ class TimerCog(commands.Cog):
                         await channel.send(f"⏰ Timer **{data['name']}** expired! {ping}")
         if changed:
             save_timers(timers)
+
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(TimerCog(bot))

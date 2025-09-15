@@ -42,9 +42,7 @@ class GravityCapture(commands.Cog):
             async with sess.get(LATEST_URL) as resp:
                 if resp.status != 200:
                     text = await resp.text()
-                    raise RuntimeError(
-                        f"GitHub API error {resp.status}: {text[:300]}"
-                    )
+                    raise RuntimeError(f"GitHub API error {resp.status}: {text[:300]}")
                 return await resp.json()
 
     @staticmethod
@@ -79,9 +77,7 @@ class GravityCapture(commands.Cog):
             assets = self._find_assets(rel)
 
             if not assets["exe"] and not assets["zip"]:
-                raise RuntimeError(
-                    "No release assets were found on the latest GitHub release."
-                )
+                raise RuntimeError("No release assets were found on the latest GitHub release.")
 
             view = discord.ui.View()
             if assets["exe"]:
