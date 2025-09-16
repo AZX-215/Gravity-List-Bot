@@ -8,11 +8,15 @@ app = FastAPI(title="Gravity List – Stage API")
 GL_SHARED_SECRET = os.environ["GL_SHARED_SECRET"]
 DATABASE_URL = os.environ["DATABASE_URL"]
 
+# NEW: create an SSL context for Railway Postgres
+SSL_CTX = ssl.create_default_context()
+
 _pool = None
 async def get_pool():
     global _pool
     if _pool is None:
-        _pool = await asyncpg.create_pool(DATABASE_URL, max_size=5)
+        # NEW: pass ssl=SSL_CTX to ensure a TLS connection
+        _pool = await asyncpg.create_pool(DATABASE_URL, max_size=5, ssl=SSL_CTX)
     return _pool
 
 @app.get("/health")
