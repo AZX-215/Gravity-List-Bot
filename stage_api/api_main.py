@@ -30,9 +30,14 @@ async def get_pool():
     global _pool
     if _pool is None:
         try:
-            _pool = await asyncpg.create_pool(DATABASE_URL, max_size=5, ssl=SSL_CTX)
+            # FIX: set both min_size and max_size so min <= max
+            _pool = await asyncpg.create_pool(
+                DATABASE_URL,
+                min_size=1,   # small is fine for stage
+                max_size=5,
+                ssl=SSL_CTX
+            )
         except Exception as e:
-            # Log a concise message to Railway logs, then re-raise
             print(f"[db] create_pool failed: {type(e).__name__}: {e}")
             raise
     return _pool
@@ -50,12 +55,10 @@ async def debug_db():
             v = await conn.fetchval("select version()")
         return {"db_ok": True, "version": v}
     except Exception as e:
-        # Don't expose secrets; just the error type/message
         return {"db_ok": False, "error": f"{type(e).__name__}: {e}"}
 
 @app.post("/api/tribe-events")
 async def tribe_events(req: Request):
-    # simple header auth
     if req.headers.get("x-gl-key") != GL_SHARED_SECRET:
         raise HTTPException(status_code=401, detail="bad key")
 
@@ -96,7 +99,6 @@ async def tribe_events(req: Request):
         pool = await get_pool()
         async with pool.acquire() as conn:
             async with conn.transaction():
-                # Run DDL idempotently, then insert
                 for stmt in [s for s in sql_create.split(';') if s.strip()]:
                     await conn.execute(stmt)
                 await conn.execute(sql_insert,
@@ -104,8 +106,6 @@ async def tribe_events(req: Request):
                     p["severity"], p["category"], p["actor"], p["message"], p["raw_line"])
         return {"ok": True}
     except Exception as e:
-        # Log the failure server-side so you can see the root cause in Railway Logs
         print(f"[api] /api/tribe-events failed: {type(e).__name__}: {e}")
-        # Return a generic 500 (details are in logs to avoid leaking internals)
         raise HTTPException(status_code=500, detail="internal error")
 
