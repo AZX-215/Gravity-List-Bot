@@ -1,111 +1,157 @@
 import os
-import ssl
+import asyncio
+import json
+from typing import Optional, List, Set
+
 import asyncpg
-from fastapi import FastAPI, Request, HTTPException
+import httpx
+from fastapi import FastAPI, Header, HTTPException
+from pydantic import BaseModel, Field
 
-app = FastAPI(title="Gravity List – Stage API")
+APP_ENV = os.getenv("ENVIRONMENT", "stage")
+DATABASE_URL = os.getenv("DATABASE_URL", "")
+SHARED = os.getenv("GL_SHARED_SECRET", "")
 
-GL_SHARED_SECRET = os.environ["GL_SHARED_SECRET"]
-DATABASE_URL = os.environ["DATABASE_URL"]
+# ---- alerts config ----
+LOG_POSTING_ENABLED = os.getenv("LOG_POSTING_ENABLED", "false").lower() == "true"
+WEBHOOK_URL = os.getenv("ALERT_DISCORD_WEBHOOK_URL", "")
 
-# ---- Robust TLS setup for Railway Postgres ----
-def build_ssl_ctx(insecure: bool = False) -> ssl.SSLContext:
-    """
-    Create an SSL context for Postgres.
-    If insecure=True (only for debugging), disable cert verification.
-    """
-    ctx = ssl.create_default_context()
-    if insecure:
-        # DEBUG ONLY: turn off verification if you see certificate errors.
-        ctx.check_hostname = False
-        ctx.verify_mode = ssl.CERT_NONE
-    return ctx
+def _csv(name: str, default: str = "") -> List[str]:
+    raw = os.getenv(name, default)
+    if not raw:
+        return []
+    return [s.strip().upper() for s in raw.split(",") if s.strip()]
 
-# Toggle this to True ONLY if logs show a certificate verify error.
-ALLOW_INSECURE_DB_SSL = os.getenv("ALLOW_INSECURE_DB_SSL", "false").lower() == "true"
-SSL_CTX = build_ssl_ctx(insecure=ALLOW_INSECURE_DB_SSL)
+ALERT_SEVERITIES: Set[str] = set(_csv("ALERT_SEVERITIES", "CRITICAL,IMPORTANT"))
+ALERT_CATEGORIES: Set[str] = set(_csv("ALERT_CATEGORIES", ""))  # empty -> all categories
 
-_pool = None
-async def get_pool():
-    global _pool
-    if _pool is None:
-        try:
-            # FIX: set both min_size and max_size so min <= max
-            _pool = await asyncpg.create_pool(
-                DATABASE_URL,
-                min_size=1,   # small is fine for stage
-                max_size=5,
-                ssl=SSL_CTX
-            )
-        except Exception as e:
-            print(f"[db] create_pool failed: {type(e).__name__}: {e}")
-            raise
-    return _pool
+app = FastAPI()
+_pool: Optional[asyncpg.Pool] = None
+_http: Optional[httpx.AsyncClient] = None
 
+
+class TribeEvent(BaseModel):
+    server: str
+    tribe: str
+    ark_day: int = Field(0, ge=0)
+    ark_time: str = ""
+    severity: str = "INFO"
+    category: str = "GENERAL"
+    actor: str = "Unknown"
+    message: str
+    raw_line: str
+
+
+# ---------- startup/shutdown ----------
+@app.on_event("startup")
+async def _start():
+    global _pool, _http
+    # DB
+    _pool = await asyncpg.create_pool(DATABASE_URL, min_size=1, max_size=3)
+    async with _pool.acquire() as con:
+        await con.execute(
+            """
+            create table if not exists tribe_events (
+              id serial primary key,
+              ingested_at timestamptz not null default now(),
+              server text not null,
+              tribe text not null,
+              ark_day integer not null,
+              ark_time text not null,
+              severity text not null,
+              category text not null,
+              actor text not null,
+              message text not null,
+              raw_line text not null
+            );
+            """
+        )
+    # HTTP client
+    _http = httpx.AsyncClient(timeout=10)
+
+@app.on_event("shutdown")
+async def _stop():
+    global _pool, _http
+    if _http:
+        await _http.aclose()
+    if _pool:
+        await _pool.close()
+
+
+# ---------- helpers ----------
+def _authorized(key: Optional[str]) -> bool:
+    return bool(SHARED) and (key == SHARED)
+
+def _should_alert(evt: TribeEvent) -> bool:
+    if not LOG_POSTING_ENABLED or not WEBHOOK_URL:
+        return False
+    sev_ok = (not ALERT_SEVERITIES) or (evt.severity.upper() in ALERT_SEVERITIES)
+    cat_ok = (not ALERT_CATEGORIES) or (evt.category.upper() in ALERT_CATEGORIES)
+    return sev_ok and cat_ok
+
+async def _post_discord(evt: TribeEvent):
+    """Post a concise alert to Discord via webhook."""
+    if not _http or not WEBHOOK_URL:
+        return
+
+    # Build a compact embed
+    color = 0xE74C3C if evt.severity.upper() == "CRITICAL" else 0xF1C40F
+    embed = {
+        "title": f"{evt.category} • {evt.severity}",
+        "color": color,
+        "fields": [
+            {"name": "Server", "value": evt.server, "inline": True},
+            {"name": "Tribe", "value": evt.tribe, "inline": True},
+            {"name": "ARK Time", "value": f"Day {evt.ark_day}, {evt.ark_time}", "inline": True},
+            {"name": "Actor", "value": evt.actor or "—", "inline": False},
+            {"name": "Msg", "value": evt.message[:1000], "inline": False},
+        ],
+        "footer": {"text": f"env={APP_ENV}"},
+    }
+    payload = {"embeds": [embed], "content": None}
+
+    try:
+        r = await _http.post(WEBHOOK_URL, json=payload)
+        # Discord returns 204 No Content on success
+        if r.status_code not in (200, 204):
+            print(f"[alert] webhook failed: {r.status_code} {r.text[:200]}")
+    except Exception as e:
+        print(f"[alert] exception: {type(e).__name__}: {e}")
+
+
+# ---------- routes ----------
 @app.get("/health")
 async def health():
-    return {"ok": True, "env": os.getenv("ENVIRONMENT", "unknown")}
-
-# Quick DB connectivity probe
-@app.get("/debug/db")
-async def debug_db():
+    # basic DB check
     try:
-        pool = await get_pool()
-        async with pool.acquire() as conn:
-            v = await conn.fetchval("select version()")
-        return {"db_ok": True, "version": v}
+        async with _pool.acquire() as con:  # type: ignore
+            ver = await con.fetchval("select version()")
+        return {"ok": True, "env": APP_ENV, "db": bool(ver)}
     except Exception as e:
-        return {"db_ok": False, "error": f"{type(e).__name__}: {e}"}
+        return {"ok": False, "env": APP_ENV, "error": f"{type(e).__name__}: {e}"}
 
 @app.post("/api/tribe-events")
-async def tribe_events(req: Request):
-    if req.headers.get("x-gl-key") != GL_SHARED_SECRET:
-        raise HTTPException(status_code=401, detail="bad key")
+async def ingest(evt: TribeEvent, x_gl_key: Optional[str] = Header(None)):
+    if not _authorized(x_gl_key):
+        raise HTTPException(status_code=401, detail="unauthorized")
 
+    # Insert
     try:
-        p = await req.json()
-    except Exception:
-        raise HTTPException(status_code=400, detail="invalid JSON")
-
-    required = ["server","tribe","ark_day","ark_time","severity","category","actor","message","raw_line"]
-    missing = [k for k in required if k not in p]
-    if missing:
-        raise HTTPException(status_code=400, detail=f"missing fields: {', '.join(missing)}")
-
-    sql_create = """
-    create table if not exists tribe_events (
-      id bigserial primary key,
-      ingested_at timestamptz not null default now(),
-      server text,
-      tribe text,
-      ark_day int,
-      ark_time text,
-      severity text check (severity in ('CRITICAL','IMPORTANT','INFO')),
-      category text,
-      actor text,
-      message text,
-      raw_line text unique
-    );
-    create index if not exists tribe_events_ingested_at_idx on tribe_events(ingested_at desc);
-    """
-    sql_insert = """
-    insert into tribe_events
-      (server, tribe, ark_day, ark_time, severity, category, actor, message, raw_line)
-    values ($1,$2,$3,$4,$5,$6,$7,$8,$9)
-    on conflict (raw_line) do nothing;
-    """
-
-    try:
-        pool = await get_pool()
-        async with pool.acquire() as conn:
-            async with conn.transaction():
-                for stmt in [s for s in sql_create.split(';') if s.strip()]:
-                    await conn.execute(stmt)
-                await conn.execute(sql_insert,
-                    p["server"], p["tribe"], int(p["ark_day"]), p["ark_time"],
-                    p["severity"], p["category"], p["actor"], p["message"], p["raw_line"])
-        return {"ok": True}
+        async with _pool.acquire() as con:  # type: ignore
+            await con.execute(
+                """
+                insert into tribe_events(server, tribe, ark_day, ark_time, severity, category, actor, message, raw_line)
+                values($1,$2,$3,$4,$5,$6,$7,$8,$9)
+                """,
+                evt.server, evt.tribe, evt.ark_day, evt.ark_time,
+                evt.severity, evt.category, evt.actor, evt.message, evt.raw_line
+            )
     except Exception as e:
-        print(f"[api] /api/tribe-events failed: {type(e).__name__}: {e}")
-        raise HTTPException(status_code=500, detail="internal error")
+        print(f"[db] insert error: {type(e).__name__}: {e}")
+        raise HTTPException(status_code=500, detail="db insert failed")
 
+    # Optional alert
+    if _should_alert(evt):
+        asyncio.create_task(_post_discord(evt))
+
+    return {"ok": True, "alerted": _should_alert(evt), "env": APP_ENV}
