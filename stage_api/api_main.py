@@ -1,7 +1,6 @@
 import os
 import asyncio
-import json
-from typing import Optional, List, Set
+from typing import Optional, List, Set, Any
 
 import asyncpg
 import httpx
@@ -66,7 +65,7 @@ async def _start():
             );
             """
         )
-    # HTTP client
+    # HTTP client for webhook
     _http = httpx.AsyncClient(timeout=10)
 
 @app.on_event("shutdown")
@@ -94,7 +93,6 @@ async def _post_discord(evt: TribeEvent):
     if not _http or not WEBHOOK_URL:
         return
 
-    # Build a compact embed
     color = 0xE74C3C if evt.severity.upper() == "CRITICAL" else 0xF1C40F
     embed = {
         "title": f"{evt.category} • {evt.severity}",
@@ -155,3 +153,37 @@ async def ingest(evt: TribeEvent, x_gl_key: Optional[str] = Header(None)):
         asyncio.create_task(_post_discord(evt))
 
     return {"ok": True, "alerted": _should_alert(evt), "env": APP_ENV}
+
+@app.get("/api/tribe-events/recent")
+async def recent(server: Optional[str] = None, tribe: Optional[str] = None, limit: int = 20):
+    """
+    Return the most recent rows (default 20, max 100), optionally filtered
+    by server and/or tribe. No auth required for staging readbacks.
+    """
+    limit = max(1, min(int(limit), 100))
+    try:
+        async with _pool.acquire() as con:  # type: ignore
+            where = []
+            args: List[Any] = []
+            if server:
+                where.append(f"server = ${len(args)+1}")
+                args.append(server)
+            if tribe:
+                where.append(f"tribe = ${len(args)+1}")
+                args.append(tribe)
+
+            sql = """
+                select id, ingested_at, server, tribe, ark_day, ark_time,
+                       severity, category, actor, message
+                from tribe_events
+            """
+            if where:
+                sql += " where " + " and ".join(where)
+            sql += f" order by id desc limit ${len(args)+1}"
+            args.append(limit)
+
+            rows = await con.fetch(sql, *args)
+            return [dict(r) for r in rows]
+    except Exception as e:
+        print(f"[db] recent error: {type(e).__name__}: {e}")
+        raise HTTPException(status_code=500, detail="db query failed")
