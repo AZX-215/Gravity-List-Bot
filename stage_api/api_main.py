@@ -1,5 +1,7 @@
 import os
+import re
 import asyncio
+from datetime import datetime, timedelta
 from typing import Optional, List, Set, Any
 
 import asyncpg
@@ -127,6 +129,28 @@ async def _post_discord(evt: TribeEvent):
         print(f"[alert] exception: {type(e).__name__}: {e}")
 
 
+# ---- ASA double-line dedupe (starved/killed same tame @ same timestamp) ----
+STARVE_RX = re.compile(r"\bstarved\s+to\s+death\b", re.I)
+KILLED_RX = re.compile(r"\bwas\s+killed\b", re.I)
+# Grab the tame identity preceding the verb phrase
+TAME_ID_RX = re.compile(
+    r"(?:Your\s+)?(?P<tame>.+?)\s+(?:starved\s+to\s+death|was\s+killed|was\s+ground\s+up|\bwas\s+destroyed\b)",
+    re.I,
+)
+
+def _tame_identity(msg: str) -> str:
+    m = TAME_ID_RX.search(msg or "")
+    ident = (m.group("tame") if m else "").strip()
+    # normalize spaces/case for comparison
+    return re.sub(r"\s+", " ", ident).strip().lower()
+
+def _is_starved(msg: str) -> bool:
+    return bool(STARVE_RX.search(msg or ""))
+
+def _is_killed(msg: str) -> bool:
+    return bool(KILLED_RX.search(msg or ""))
+
+
 # ---------- routes ----------
 @app.get("/health")
 async def health():
@@ -143,9 +167,38 @@ async def ingest(evt: TribeEvent, x_gl_key: Optional[str] = Header(None)):
     if not _authorized(x_gl_key):
         raise HTTPException(status_code=401, detail="unauthorized")
 
-    # Insert (de-duped on raw_line)
+    # ------ dedupe window (prefer STARVED over generic KILLED) ------
+    fam_ident = _tame_identity(evt.message or evt.raw_line)
+    deduped = False
+
     try:
         async with _pool.acquire() as con:  # type: ignore
+            # look back a short window for same tame at same ark time
+            rows = await con.fetch(
+                """
+                select id, message
+                  from tribe_events
+                 where server=$1 and tribe=$2 and ark_day=$3 and ark_time=$4
+                   and ingested_at >= (now() - interval '2 minutes')
+                 order by id desc
+                """,
+                evt.server, evt.tribe, evt.ark_day, evt.ark_time
+            )
+
+            for r in rows:
+                if _tame_identity(r["message"]) == fam_ident:
+                    # existing STARVED & new KILLED -> suppress new
+                    if _is_starved(r["message"]) and _is_killed(evt.message):
+                        deduped = True
+                    # existing KILLED & new STARVED -> upgrade (delete old, keep new)
+                    elif _is_killed(r["message"]) and _is_starved(evt.message):
+                        await con.execute("delete from tribe_events where id=$1", r["id"])
+                    break
+
+            if deduped:
+                return {"ok": True, "deduped": True, "alerted": False, "env": APP_ENV}
+
+            # Insert (de-duped on raw_line as a second safety net)
             status: str = await con.execute(
                 """
                 insert into tribe_events
