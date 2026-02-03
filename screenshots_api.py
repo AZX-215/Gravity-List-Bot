@@ -5,6 +5,7 @@ import time
 import asyncio
 import threading
 from datetime import datetime, timezone
+from queue import Queue, Full
 
 from fastapi import FastAPI, UploadFile, File, Form, Header, HTTPException
 from discord import File as DFile
@@ -13,9 +14,9 @@ from discord import File as DFile
 #   setup_screenshot_api(bot) -> (fastapi_app, start_worker_coroutine)
 #   run_fastapi_in_thread(app, port)
 #
-# The worker is intentionally NOT scheduled here (to avoid touching the
-# event loop before discord.py is running). bot.py awaits the returned
-# start_worker coroutine inside on_ready.
+# The FastAPI server runs in a background thread (uvicorn has its own event loop).
+# Because of that, we MUST NOT use asyncio.Queue to pass items between FastAPI and
+# discord.py. We use a threadsafe Queue and bridge it into the discord loop.
 
 
 def setup_screenshot_api(bot):
@@ -24,10 +25,14 @@ def setup_screenshot_api(bot):
     async callable that schedules the background worker on the running event loop.
     """
     app = FastAPI(title="Gravity List – Screenshot Ingest")
-    queue: asyncio.Queue = asyncio.Queue()
+
+    # Thread-safe cross-thread queue (FastAPI thread -> discord loop)
+    queue_max = int(os.getenv("SCREENSHOT_QUEUE_MAX", "50") or "50")
+    q: Queue = Queue(maxsize=max(1, queue_max))
 
     SECRET = os.getenv("SCREENSHOT_AGENT_KEY", "")
     DEFAULT_CH = int(os.getenv("SCREENSHOT_CHANNEL_ID", "0"))
+    MAX_BYTES = int(os.getenv("SCREENSHOT_MAX_BYTES", str(8 * 1024 * 1024)) or str(8 * 1024 * 1024))
 
     @app.post("/api/screenshots")
     async def receive_screenshot(
@@ -40,22 +45,34 @@ def setup_screenshot_api(bot):
         if not SECRET or x_gl_key != SECRET:
             raise HTTPException(401, "Unauthorized (bad key)")
 
+        target_ch = channel_id or DEFAULT_CH
+        if not target_ch:
+            raise HTTPException(400, "No channel_id provided and SCREENSHOT_CHANNEL_ID not set")
+
         data = await file.read()
-        await queue.put(
-            {
-                "bytes": data,
-                "filename": file.filename or f"screenshot_{int(time.time())}.jpg",
-                "channel_id": channel_id or DEFAULT_CH,
-                "caption": caption
-                or f"Screenshot {datetime.fromtimestamp(ts or time.time(), tz=timezone.utc).astimezone().isoformat(timespec='seconds')}",
-            }
-        )
+        if MAX_BYTES and len(data) > MAX_BYTES:
+            raise HTTPException(413, f"File too large (>{MAX_BYTES} bytes)")
+
+        item = {
+            "bytes": data,
+            "filename": file.filename or f"screenshot_{int(time.time())}.jpg",
+            "channel_id": target_ch,
+            "caption": caption
+            or f"Screenshot {datetime.fromtimestamp(ts or time.time(), tz=timezone.utc).astimezone().isoformat(timespec='seconds')}",
+        }
+
+        try:
+            q.put_nowait(item)
+        except Full:
+            raise HTTPException(429, "Queue full, try again shortly")
+
         return {"queued": True}
 
     async def worker():
         await bot.wait_until_ready()
         while True:
-            item = await queue.get()
+            # Block in a thread so we don't block the discord event loop
+            item = await asyncio.to_thread(q.get)
             try:
                 channel = bot.get_channel(item["channel_id"]) or await bot.fetch_channel(
                     item["channel_id"]
@@ -70,7 +87,10 @@ def setup_screenshot_api(bot):
                 print(f"[screenshot-worker] {e}")
                 await asyncio.sleep(3)
             finally:
-                queue.task_done()
+                try:
+                    q.task_done()
+                except Exception:
+                    pass
 
     async def start_worker():
         # Schedule the worker on the already-running discord loop

@@ -26,6 +26,8 @@ class DiscordLogHandler(logging.Handler):
         self.interval = interval
         self.buffer = []
         self.last_sent = 0
+        self._flush_lock = asyncio.Lock()
+        self._flush_task = None
 
     def emit(self, record):
         try:
@@ -33,24 +35,34 @@ class DiscordLogHandler(logging.Handler):
             self.buffer.append(msg)
             now = time.time()
             if now - self.last_sent >= self.interval:
-                asyncio.create_task(self.flush())
+                # Avoid spawning many concurrent flush tasks
+                if self._flush_task is None or self._flush_task.done():
+                    self._flush_task = asyncio.create_task(self.flush())
         except Exception:
             pass
 
     async def flush(self):
-        if not self.buffer:
-            return
-        channel = self.bot.get_channel(self.channel_id)
-        if not channel:
-            return
-        content = "```" + "\n".join(self.buffer) + "```"
-        try:
-            await channel.send(content)
-        except Exception:
-            pass
-        self.buffer.clear()
-        self.last_sent = time.time()
+        async with self._flush_lock:
+            if not self.buffer:
+                return
 
+            channel = self.bot.get_channel(self.channel_id)
+            if not channel:
+                return
+
+            joined = "\n".join(self.buffer)
+            self.buffer.clear()
+
+            # Chunk to avoid Discord 2000-char limit (include code fences)
+            max_payload = 1900
+            for i in range(0, len(joined), max_payload):
+                chunk = joined[i : i + max_payload]
+                try:
+                    await channel.send(f"```{chunk}```")
+                except Exception:
+                    pass
+
+            self.last_sent = time.time()
 
 def _fmt_duration(seconds: float) -> str:
     seconds = int(seconds)
