@@ -232,6 +232,15 @@ async def on_ready():
         except Exception as e:
             print(f"[gravity_capture] not loaded: {e}")
 
+
+    # --- Auto-prune (keeps last N messages in selected channels) ---
+    if "autoprune" not in bot.extensions:
+        try:
+            await bot.load_extension("autoprune")
+            print("[autoprune] loaded")
+        except Exception as e:
+            print(f"[autoprune] not loaded: {e}")
+
     # Slash command sync
     if GUILD_ID:
         await bot.tree.sync(guild=discord.Object(id=GUILD_ID))

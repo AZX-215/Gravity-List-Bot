@@ -17,6 +17,8 @@ GEN_DASHBOARDS_PATH = os.getenv("GEN_DASHBOARDS_PATH") or os.path.join(
 
 TIMERS_PATH = os.path.join(BASE_DIR, "timers.json")
 
+AUTOPRUNE_PATH = os.getenv("AUTOPRUNE_PATH") or os.path.join(BASE_DIR, "autoprune.json")
+
 
 # ───────────────────────────── I/O helpers ──────────────────────────────
 def _ensure_dir(path: str) -> None:
@@ -417,3 +419,57 @@ def remove_timer(timer_id: str) -> None:
     if timer_id in timers:
         del timers[timer_id]
         save_timers(timers)
+
+
+# ─────────────────────────────── Auto-prune API ────────────────────────────
+# Stores per-guild channel settings for scheduled pruning that keeps only the
+# latest N messages (optionally excluding pinned messages).
+def load_autoprune() -> Dict[str, Any]:
+    return _safe_read_json(AUTOPRUNE_PATH, default={"guilds": {}})
+
+
+def save_autoprune(data: Dict[str, Any]) -> None:
+    _safe_write_json(AUTOPRUNE_PATH, data)
+
+
+def get_autoprune_channels(guild_id: int) -> Dict[str, Any]:
+    doc = load_autoprune()
+    g = doc.get("guilds", {}).get(str(guild_id), {})
+    return g.get("channels", {}) if isinstance(g, dict) else {}
+
+
+def set_autoprune_channel(
+    guild_id: int,
+    channel_id: int,
+    keep_last: int = 10,
+    include_pinned: bool = False,
+    max_deletes_per_run: int = 100,
+) -> None:
+    doc = load_autoprune()
+    guilds = doc.setdefault("guilds", {})
+    g = guilds.setdefault(str(guild_id), {})
+    channels = g.setdefault("channels", {})
+    channels[str(channel_id)] = {
+        "keep_last": int(keep_last),
+        "include_pinned": bool(include_pinned),
+        "max_deletes_per_run": int(max_deletes_per_run),
+    }
+    save_autoprune(doc)
+
+
+def remove_autoprune_channel(guild_id: int, channel_id: int) -> bool:
+    doc = load_autoprune()
+    guilds = doc.get("guilds", {})
+    g = guilds.get(str(guild_id), {})
+    channels = g.get("channels", {}) if isinstance(g, dict) else {}
+    if str(channel_id) in channels:
+        del channels[str(channel_id)]
+        # Clean up empty guild entries
+        if not channels:
+            try:
+                del guilds[str(guild_id)]
+            except Exception:
+                pass
+        save_autoprune(doc)
+        return True
+    return False
