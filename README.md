@@ -62,9 +62,7 @@ The bot can write warnings/errors and short heartbeat summaries to a private Dis
 
 /set_log_channel #ops-logs # admin only
 
-
-### 6) 🖼️ (Optional) Screenshots worker
-A tiny helper process can ship screenshots (e.g., map caps, dashboards) into channels through a small queue to avoid bursts. Ship captions with images for context.
+ext.
 
 ---
 
