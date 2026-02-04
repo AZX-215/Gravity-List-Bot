@@ -234,17 +234,6 @@ async def on_ready():
     # --- Ark Status integration (always on unless it throws) ---
     await setup_arkstatus_asa(bot)
 
-    # --- NEW: Load Gravity Capture downloader (GitHub Releases) ---
-    if "gravity_capture" not in bot.extensions:
-        try:
-            await bot.load_extension(
-                "gravity_capture"
-            )  # file `gravity_capture.py` next to bot.py or on PYTHONPATH
-            print("[gravity_capture] loaded")
-        except Exception as e:
-            print(f"[gravity_capture] not loaded: {e}")
-
-
     # --- Auto-prune (keeps last N messages in selected channels) ---
     if "autoprune" not in bot.extensions:
         try:

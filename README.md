@@ -1,6 +1,6 @@
 # Gravity List Bot
 
-Slash-only Discord bot for Ark: Survival Ascended groups: smart lists, generator dashboards, timers, optional server status dashboards, and structured logging.
+> A fast, slash-only Discord bot that helps Ark: Survival Ascended groups stay organized: smart lists, generator dashboards, countdown timers, optional server status, and structured logging.
 
 <p align="center">
   <img alt="Discord" src="https://img.shields.io/badge/Discord.py-2.x-blue">
@@ -10,47 +10,76 @@ Slash-only Discord bot for Ark: Survival Ascended groups: smart lists, generator
 
 ---
 
-## What it does
+## ✨ What it does (feature tour)
 
-### 📋 Smart Lists
-Structured lists with categories, named entries, bullets, and free-text sections. Deploy a list to a channel as a single rendered message/embed.
+### 1) 📋 Smart Lists (with categories, notes, and comments)
+Keep PvP intel and tribe coordination tidy in one place.
 
-### ⛽ Generator dashboards
-Track Tek/Gas/Electrical generator burn time and deploy/update a live dashboard message.
+- **Built-in categories:** 👑 Owner · 🔴 Enemy · 🟢 Friend · 🔵 Ally · 🟡 Beta · ⚫ Item
+- **Entry types:** plain text notes, bullets, and named items you can re-order and edit.
+- **Per-item comments:** attach a short note to any entry (e.g., “offline 2am-8am”).
+- **Deploy to a channel:** render/update a list in an embed on demand.
 
-### ⏱️ Timers
-Create, pause/resume, edit, and delete timers.
+**Typical flow**
 
-### 🧹 AutoPrune (keep last N)
-Automatically deletes the **oldest** messages in a channel while always keeping the newest **N**.
+/add_name list_name:Scouts category:Enemy item_name:"Tribe XYZ"
+/add_comment list_name:Scouts item_name:"Tribe XYZ" comment:"Seen on NE Snow"
+/deploy_list name:Scouts
 
-- Runs every **2 hours**
-- Deletes oldest first; does nothing if the channel has ≤ `keep_last`
-- Bulk-deletes recent messages when possible (Discord bulk-delete limit is ~14 days)
-- Falls back to slow 1-by-1 deletes for older messages
-- Designed to be gentle on rate limits (configurable delays)
 
-### 🧾 Logging
-- Console logging goes to **stdout** (Railway-friendly)
-- Optional **Discord ops log channel** (buffered)
-- Optional **command-usage log channel** (recommended)
+### 2) ⚡ Generator Dashboards (ASA base upkeep)
+One glance health for Tek/Electrical generators with role-based pings.
 
-> This bot does **not** run a screenshots ingest HTTP server. Screenshot ingest/processing should live in your separate **Gravity Capture** stack.
+- Track **element/shards** for Tek; **gas/imbued** for Electrical.
+- Auto-refresh every 90s (staggered by 1s) with rate-limit back-off.
+- Assign a **role** to ping when a dashboard requires attention.
+
+**Example**
+
+/create_gen_list name:MainBase
+/add_gen_tek list_name:MainBase gen_name:Forge element:700 shards:0
+/add_gen_electrical list_name:MainBase gen_name:Workshop gas:30 imbued:12
+/set_gen_role list_name:MainBase role:@Maintenance
+/deploy_gen_list name:MainBase
+
+
+### 3) ⏱️ Standalone Countdown Timers
+Fire-and-forget timers for raids, imprints, breeding, and chores.
+
+- Create, pause/resume, edit, delete.
+- Safe for long-running servers; checks every minute and posts when done.
+
+/create_timer name:"Raid timer" hours:1 minutes:45
+
+
+### 4) 🛰️ (Optional) Server Status / ASA Uptime
+If enabled in the environment, the bot can post a single-card status for your ASA server (players, map, status). Useful for quick checks in ops channels.
+
+> This module is off by default and gated behind an environment flag so the bot can remain minimal when you don't need it.
+
+### 5) 🧾 Logging & Debug (private channel)
+The bot can write warnings/errors and short heartbeat summaries to a private Discord channel you choose. Messages are buffered and posted in small batches (gentle on rate limits).
+
+/set_log_channel #ops-logs # admin only
+
 
 ---
 
-## Command catalog
+## 🧩 Commands (catalog)
+
+> All commands are **slash commands**. No message content is processed.
 
 ### Lists
-- `/create_list` · `/delete_list`
-- `/add_list_category` · `/edit_list_category` · `/remove_list_category`
+- `/add_list_category`
+- `/edit_list_category`
+- `/remove_list_category`
 - `/assign_to_category`
 - `/add_text` · `/edit_text` · `/remove_text`
 - `/add_bullet` · `/edit_bullet` · `/remove_bullet`
 - `/add_name` · `/edit_name` · `/remove_name` · `/move_name` · `/sort_list`
 - `/add_comment` · `/edit_comment` · `/remove_comment`
-- `/view_lists`
-- `/deploy_list`
+- `/view_lists` — list all lists
+- `/deploy_list name:<list>` — render/update a list in a channel
 
 ### Generator dashboards
 - `/create_gen_list` · `/delete_gen_list`
@@ -59,160 +88,132 @@ Automatically deletes the **oldest** messages in a channel while always keeping 
 - `/remove_gen` · `/reorder_gen`
 - `/set_gen_role`
 - `/view_gen_lists`
-- `/deploy_gen_list`
-- `/mute_gen_alerts` · `/unmute_gen_alerts`
-- `/update_all_gens_tek` · `/update_all_gens_electrical`
+- `/deploy_gen_list name:<list>`
 
 ### Timers
-- `/create_timer`
-- `/pause_timer` · `/resume_timer`
-- `/edit_timer`
-- `/delete_timer`
+- `/create_timer` · `/pause_timer` · `/resume_timer`
+- `/edit_timer` · `/delete_timer`
 
-### AutoPrune
-- `/autoprune_enable`
-- `/autoprune_disable`
-- `/autoprune_list`
-- `/autoprune_run_now`
-
-### Optional dashboards (if enabled)
-BattleMetrics:
-- `/bm_asa_server_query`
-- `/bm_asa_dashboard_start` · `/bm_asa_dashboard_stop` · `/bm_asa_dashboard_refresh`
-
-ArkStatus:
-- `/as_server_query`
-- `/as_dashboard_start` · `/as_dashboard_stop` · `/as_dashboard_refresh`
-
-### Debug / maintenance (optional)
-- `/debug_storage`
-- `/migrate_regular_lists_to_subdir`
-- `/migrate_gen_lists_to_volume`
+### Ops / logging (optional)
+- `/set_log_channel` (admin)
 
 ---
 
-## Setup (local)
+## 🛠️ Setup (self-hosting)
 
 ### Requirements
-- Python 3.11+
-- A Discord application + bot token
+- Python **3.11+**
+- A Discord **application + bot** (slash commands)
+- Recommended: a private “ops logs” channel for errors
 
-### Install
+### 1) Get the code
 ```bash
+git clone https://github.com/AZX-215/Gravity-List-Bot.git
+cd Gravity-List-Bot
+
+2) Configure environment
+
+cp .env.example .env
+# Edit with your values:
+DISCORD_TOKEN=your-bot-token                 # required
+CLIENT_ID=your-app-client-id                 # required for slash sync
+GUILD_ID=optional_dev_guild_id               # optional: speeds up local command sync
+LOG_CHANNEL_ID=optional_channel_id           # optional: for private logs
+DATABASE_PATH=lists/data.json                # optional: custom path (default shown)
+ENABLE_BATTLEMETRICS=0                       # optional: set 1 to enable server status
+
+    Data location: lists are stored on disk (JSON). You can point DATABASE_PATH wherever you prefer on your host.
+
+3) Install & run
+
 pip install -r requirements.txt
-```
-
-### Configure
-Copy `env.example` to `.env` and fill in values (or set env vars in your shell/host).
-
-Minimum:
-- `DISCORD_TOKEN`
-
-Run:
-```bash
 python bot.py
-```
 
----
+4) Railway (quick deploy)
 
-## Railway deployment
+    Set the same .env keys in Railway → Variables.
 
-### Required Railway variables
-- `DISCORD_TOKEN`
+    Give the service a 10–30s teardown overlap so timers/list refreshes bridge restarts.
 
-### Recommended (persistence)
-Mount a Railway volume (example mount: `/data`) and set:
-- `DATABASE_PATH=/data/lists/data.json`
+    Check “Deploy Logs” after each release to confirm slash commands are synced.
 
-This causes all bot JSON data to live under `/data/` (lists, generator lists, timers, autoprune config, etc.).
+🔒 Discord intents & permissions (for Trust & Safety review)
 
-### Recommended (log sanity)
-- `LOG_LEVEL=INFO`
-- `QUIET_DISCORD_LOGS=1` (default; suppresses high-frequency `discord.gateway` INFO like “RESUMED session”)
+Bot style: slash-only.
+Message Content Intent: Off (not required).
+Presence Intent: Off (not required).
+Server Members Intent: Off by default. (Turn on only if you plan to use member-aware features later.)
 
----
+Requested permissions in servers
 
-## Environment variables
+    Send Messages, Embed Links, Read Message History
 
-### Core
-- `DISCORD_TOKEN` (required)
-- `GUILD_ID` (optional; `0` = global slash sync, faster dev sync if set)
-- `BRAND_NAME` (optional; used in some dashboard output)
+    Manage Messages (optional: if you want the bot to tidy its own posts)
 
-### Storage
-- `DATABASE_PATH` (default: `./data.json`)
-- `DASHBOARDS_PATH` (default: alongside DATABASE_PATH)
-- `GEN_DASHBOARDS_PATH` (default: alongside DATABASE_PATH)
-- `AUTOPRUNE_PATH` (default: alongside DATABASE_PATH)
+    Use Slash Commands
 
-> Tip: On Railway, setting `DATABASE_PATH` inside your volume is usually enough; the rest default into the same directory.
+What the bot stores
 
-### Logging (console)
-- `LOG_LEVEL` (default `INFO`)
+    List/dashboard content and names
 
-### Logging (Discord channel posting)
-If these are unset, nothing is posted to Discord and logs remain in Railway/stdout.
+    Channel/message IDs where the bot posts its own embeds (for updating)
 
-Ops log channel:
-- `LOG_CHANNEL_ID`
-- `LOG_CHANNEL_LEVEL` (default `WARNING`)
-- `LOG_CHANNEL_FLUSH_SEC` (default `10`)
-- `LOG_CHANNEL_MAX_LINES` (default `200`)
+    Optional: a destination channel ID for logs
 
-Command usage channel (recommended):
-- `COMMAND_LOG_CHANNEL_ID`
-- `COMMAND_LOG_CHANNEL_LEVEL` (default `INFO`)
-- `COMMAND_LOG_FLUSH_SEC` (default: `LOG_CHANNEL_FLUSH_SEC`)
-- `COMMAND_LOG_MAX_LINES` (default: `LOG_CHANNEL_MAX_LINES`)
+What the bot does not do
 
-Noise suppression:
-- `QUIET_DISCORD_LOGS` (default `1`)
-- `SUPPRESS_HTTP_RATELIMIT_WARNINGS` (default `1`; prevents frequent `discord.http` 429 warnings from being posted to Discord log channels)
+    No DM processing, no message content reading, no member scraping
 
-### AutoPrune tuning (optional)
-- `AUTOPRUNE_USE_BULK_DELETE` (default `1`)
-- `AUTOPRUNE_BULK_SAFE_DAYS` (default `13.5`)
-- `AUTOPRUNE_BULK_DELAY_SECONDS` (default `0.80`)
-- `AUTOPRUNE_DELETE_DELAY_SECONDS` (default `1.10`)
+    No retention of user PII beyond Discord IDs tied to bot messages
 
-### Optional: BattleMetrics module
-Enable:
-- `ENABLE_BATTLEMETRICS=1`
+    No third-party data sharing
 
-Required:
-- `BM_API_KEY`
-- `BM_SERVER_IDS` (comma-separated)
+Delete my data
 
-Optional:
-- `BM_CHANNEL_ID`
-- `BM_REFRESH_SEC`
-- `BM_BACKOFF_SEC`
+    Remove items via slash commands or remove the whole list; the JSON entry is deleted.
 
-### Optional: ArkStatus module
-Required:
-- `AS_API_KEY`
-- `AS_TARGETS` (comma-separated)
+    Removing the bot from a server stops all collection immediately.
 
-Optional:
-- `AS_CHANNEL_ID`
-- `AS_REFRESH_SEC`
-- `AS_BACKOFF_SEC`
-- `AS_TIER`
+Contact
 
----
+    Open an issue on the GitHub repository (preferred).
 
-## Discord intents & permissions
+    For abuse reports or takedowns, include a link to the offending message and server.
 
-### Intents
-- Message Content intent: **Off** (slash-only)
-- Presence intent: **Off**
-- Server Members intent: **Off** (unless you add member-aware features)
+🤝 GravityCapture (companion app)
 
-### Permissions
-Recommended:
-- Send Messages
-- Embed Links
-- Read Message History
+We’re building GravityCapture
 
-Additional permissions if you enable specific features:
-- Manage Messages (AutoPrune)
+alongside this bot. It’s an auxiliary service that ingests server logs and forwards structured insights to Discord.
+
+    Status: active development (not yet feature-complete)
+
+    Goal: become a fully-functioning ops/log bot—alerts, searchable history, and structured summaries that complement Gravity List dashboards
+
+    Integration: GravityCapture is a separate service/app; Gravity List does not handle screenshot ingest.
+
+Stay tuned on the GravityCapture repo for milestones and usage docs.
+🗺️ Roadmap
+
+    EOS player tracking (teaser): upcoming feature to track player identities across EOS, with privacy-respecting summaries surfaced in ops channels. Perfect for scouting and ban-evasion detection.
+
+    Richer dashboard widgets (generators, turrets, fridges)
+
+    Scheduled report posts (daily/weekly base health)
+
+    Multi-guild separation & export/import tools
+
+🧪 Local development
+
+python -m venv .venv
+. .venv/bin/activate  # Windows: .venv\Scripts\activate
+pip install -r requirements.txt -r requirements-dev.txt
+pre-commit install
+pre-commit run -a
+
+📦 Versioning & releases
+
+We tag releases (vX.Y.Z) and ship via GitHub Releases. Pin a specific tag for production deploys. See CHANGELOG for details.
+📝 License
+
+MIT — contributions welcome! Open issues/PRs for bugs, features, and docs.

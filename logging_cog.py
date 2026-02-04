@@ -73,6 +73,9 @@ class DiscordLogHandler(logging.Handler):
         self._flush_lock = asyncio.Lock()
         self._flush_task: asyncio.Task | None = None
 
+        # Throttled error reporting (stdout) so misconfigurations are visible.
+        self._last_error_print = 0.0
+
         self.addFilter(_DropNoisyLogsFilter())
 
     def emit(self, record: logging.LogRecord) -> None:
@@ -113,6 +116,10 @@ class DiscordLogHandler(logging.Handler):
                 try:
                     channel = await self.bot.fetch_channel(self.channel_id)
                 except Exception:
+                    now = time.time()
+                    if now - self._last_error_print > 600:
+                        self._last_error_print = now
+                        print(f"[logging] cannot access channel_id={self.channel_id} (fetch_channel failed)")
                     return
 
             # Take a batch of lines to send
@@ -146,6 +153,10 @@ class DiscordLogHandler(logging.Handler):
                 try:
                     await channel.send(content)
                 except Exception:
+                    now = time.time()
+                    if now - self._last_error_print > 600:
+                        self._last_error_print = now
+                        print(f"[logging] failed to send logs to channel_id={self.channel_id}")
                     # If a chunk fails, stop to avoid spamming retries
                     break
                 await asyncio.sleep(0.8)
@@ -208,13 +219,22 @@ class LoggingCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
+        def _env_int(name: str, default: int = 0) -> int:
+            try:
+                v = (os.getenv(name, "") or "").strip()
+                if not v or v == "0":
+                    return default
+                return int(v)
+            except Exception:
+                return default
+
         # Root logger to channel (buffered)
         root = logging.getLogger()
         # Do not override root level if already configured (bot.py sets it)
         if root.level in (logging.NOTSET, 0):
             root.setLevel(logging.INFO)
 
-        channel_id = os.getenv("LOG_CHANNEL_ID")
+        channel_id = _env_int("LOG_CHANNEL_ID", 0)
         if channel_id:
             level_name = (os.getenv("LOG_CHANNEL_LEVEL", "WARNING") or "WARNING").upper()
             ch_level = getattr(logging, level_name, logging.WARNING)
@@ -237,7 +257,11 @@ class LoggingCog(commands.Cog):
         self._cmd_logger = logging.getLogger("glb.command_usage")
         self._cmd_logger.setLevel(logging.INFO)
 
-        cmd_ch_id = os.getenv("COMMAND_LOG_CHANNEL_ID")
+        cmd_ch_id = _env_int("COMMAND_LOG_CHANNEL_ID", 0)
+        # Default: if no dedicated command-log channel is set, post command usage to LOG_CHANNEL_ID.
+        if not cmd_ch_id and self._log_channel_id:
+            cmd_ch_id = int(self._log_channel_id)
+
         if cmd_ch_id:
             cmd_level_name = (os.getenv("COMMAND_LOG_CHANNEL_LEVEL", "INFO") or "INFO").upper()
             cmd_level = getattr(logging, cmd_level_name, logging.INFO)
