@@ -37,6 +37,12 @@ class _DropNoisyLogsFilter(logging.Filter):
         if name.startswith("uvicorn") and record.levelno < logging.WARNING:
             return False
 
+        # Optional: suppress discord.py HTTP 429 rate-limit warnings from being posted to Discord.
+        # (They still appear in stdout/Railway logs.)
+        suppress_rl = os.getenv("SUPPRESS_HTTP_RATELIMIT_WARNINGS", "1").strip().lower() not in {"0", "false", "no"}
+        if suppress_rl and name.startswith("discord.http") and "We are being rate limited" in msg and record.levelno == logging.WARNING:
+            return False
+
         return True
 
 
@@ -164,6 +170,38 @@ def _fmt_duration(seconds: float) -> str:
     return " ".join(parts)
 
 
+def _format_app_command(interaction: discord.Interaction) -> str:
+    # Best-effort rendering of a slash command invocation with options.
+    try:
+        data = interaction.data or {}
+        name = data.get("name", "unknown")
+        opts = data.get("options") or []
+        parts: list[str] = []
+
+        def walk(options):
+            for opt in options or []:
+                t = opt.get("type")
+                # 1=subcommand, 2=subcommand group
+                if t in (1, 2):
+                    parts.append(str(opt.get("name", "")))
+                    walk(opt.get("options") or [])
+                else:
+                    k = opt.get("name", "")
+                    v = opt.get("value", None)
+                    if v is None:
+                        parts.append(str(k))
+                    else:
+                        parts.append(f"{k}={v}")
+
+        walk(opts)
+        if parts:
+            return "/" + " ".join([str(name)] + parts)
+        return "/" + str(name)
+    except Exception:
+        return "/unknown"
+
+
+
 class LoggingCog(commands.Cog):
     """Cog to send INFO+ logs to a Discord channel and track key events, with gated disconnect alerts."""
 
@@ -191,6 +229,41 @@ class LoggingCog(commands.Cog):
         else:
             self.handler = None
             self._log_channel_id = None
+
+
+
+        # Optional: separate command-usage logging to a dedicated channel
+        # This lets you keep LOG_CHANNEL_LEVEL at WARNING+ while still getting command usage at INFO.
+        self._cmd_logger = logging.getLogger("glb.command_usage")
+        self._cmd_logger.setLevel(logging.INFO)
+
+        cmd_ch_id = os.getenv("COMMAND_LOG_CHANNEL_ID")
+        if cmd_ch_id:
+            cmd_level_name = (os.getenv("COMMAND_LOG_CHANNEL_LEVEL", "INFO") or "INFO").upper()
+            cmd_level = getattr(logging, cmd_level_name, logging.INFO)
+            cmd_flush_sec = int(os.getenv("COMMAND_LOG_FLUSH_SEC", os.getenv("LOG_CHANNEL_FLUSH_SEC", "10")) or "10")
+            cmd_max_lines = int(os.getenv("COMMAND_LOG_MAX_LINES", os.getenv("LOG_CHANNEL_MAX_LINES", "200")) or "200")
+
+            cmd_handler = DiscordLogHandler(
+                bot,
+                int(cmd_ch_id),
+                level=cmd_level,
+                interval=cmd_flush_sec,
+                max_lines_per_flush=cmd_max_lines,
+            )
+            cmd_handler.setFormatter(logging.Formatter("%(asctime)s %(message)s"))
+
+            # Avoid duplication to root logger
+            self._cmd_logger.propagate = False
+
+            # Hot-reload safety
+            for h in list(self._cmd_logger.handlers):
+                self._cmd_logger.removeHandler(h)
+
+            self._cmd_logger.addHandler(cmd_handler)
+        else:
+            # Fall back to root logger (subject to LOG_LEVEL / LOG_CHANNEL_LEVEL)
+            self._cmd_logger.propagate = True
 
         # Disconnect gating (env default; may be overridden by debug.py state)
         self._env_threshold = int(os.getenv("DISCONNECT_ALERT_THRESHOLD_SEC", "300") or "300")
@@ -326,9 +399,11 @@ class LoggingCog(commands.Cog):
     @commands.Cog.listener()
     async def on_interaction(self, interaction: discord.Interaction):
         if interaction.type is discord.InteractionType.application_command:
-            name = interaction.data.get("name", "unknown")
+            cmd = _format_app_command(interaction)
             user = interaction.user
-            logging.getLogger().info(f"📥 {user} used /{name}")
+            guild = interaction.guild.name if interaction.guild else "DM"
+            channel = getattr(interaction.channel, "name", "unknown")
+            self._cmd_logger.info(f"📥 {user} in {guild}/#{channel}: {cmd}")
 
     # --- Errors ----------------------------------------------------------------
     @commands.Cog.listener()

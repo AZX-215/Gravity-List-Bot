@@ -1,4 +1,7 @@
 import asyncio
+import os
+from datetime import timedelta
+
 import discord
 from typing import Optional
 from discord import app_commands
@@ -20,7 +23,11 @@ def _guild_me(guild: discord.Guild, bot: commands.Bot):
         return None
 
 
-DELETE_DELAY_SECONDS = 0.35  # per-message delay to stay gentle with rate limits
+DELETE_DELAY_SECONDS = float(os.getenv("AUTOPRUNE_DELETE_DELAY_SECONDS", "1.10"))
+USE_BULK_DELETE = os.getenv("AUTOPRUNE_USE_BULK_DELETE", "1").strip().lower() not in {"0","false","no"}
+BULK_SAFE_DAYS = float(os.getenv("AUTOPRUNE_BULK_SAFE_DAYS", "13.5"))  # keep under 14d hard limit
+BULK_DELAY_SECONDS = float(os.getenv("AUTOPRUNE_BULK_DELAY_SECONDS", "0.80"))
+
 
 
 async def _resolve_channel(bot: commands.Bot, channel_id: int):
@@ -74,38 +81,106 @@ async def _prune_channel(
 ) -> int:
     """
     Deletes oldest messages (optionally excluding pinned) so that only the latest N are kept.
+    Uses bulk delete for messages newer than ~14 days to reduce rate limits.
     Returns number of messages deleted this run.
     """
     cutoff = await _find_cutoff_message(channel, keep_last, include_pinned)
     if cutoff is None:
         return 0
 
-    deleted = 0
     before_obj = discord.Object(id=cutoff.id)
 
+    # Gather candidates (oldest first) up to max_deletes_per_run
+    candidates: list[discord.Message] = []
     async for msg in channel.history(limit=None, before=before_obj, oldest_first=True):
         if not include_pinned and getattr(msg, "pinned", False):
             continue
+        candidates.append(msg)
+        if max_deletes_per_run and len(candidates) >= max_deletes_per_run:
+            break
 
+    if not candidates:
+        return 0
+
+    deleted = 0
+
+    # Discord bulk delete cannot delete messages older than 14 days.
+    now = discord.utils.utcnow()
+    bulk_cutoff = now - timedelta(days=BULK_SAFE_DAYS)
+
+    old_msgs: list[discord.Message] = []
+    bulk_msgs: list[discord.Message] = []
+
+    for msg in candidates:
+        try:
+            if USE_BULK_DELETE and msg.created_at and msg.created_at > bulk_cutoff:
+                bulk_msgs.append(msg)
+            else:
+                old_msgs.append(msg)
+        except Exception:
+            old_msgs.append(msg)
+
+    # Always delete oldest messages first (older ones will typically be oldest)
+    for msg in old_msgs:
         try:
             await msg.delete()
             deleted += 1
         except discord.Forbidden:
-            # missing permissions; stop hard
             break
         except discord.NotFound:
-            # already deleted; continue
             pass
         except discord.HTTPException:
-            # transient; slow down slightly and continue
-            await asyncio.sleep(1.0)
-
-        if max_deletes_per_run and deleted >= max_deletes_per_run:
-            break
+            # Let discord.py handle retries internally; we just slow down a bit.
+            await asyncio.sleep(1.5)
 
         await asyncio.sleep(DELETE_DELAY_SECONDS)
 
+    # Bulk delete remaining newer messages in chunks (up to 100 per call)
+    if bulk_msgs:
+        chunk: list[discord.Message] = []
+        for msg in bulk_msgs:
+            chunk.append(msg)
+            if len(chunk) >= 100:
+                try:
+                    await channel.delete_messages(chunk)
+                    deleted += len(chunk)
+                except discord.Forbidden:
+                    break
+                except discord.HTTPException:
+                    # fallback to individual deletes for this chunk
+                    for m in chunk:
+                        try:
+                            await m.delete()
+                            deleted += 1
+                        except Exception:
+                            pass
+                        await asyncio.sleep(DELETE_DELAY_SECONDS)
+                chunk = []
+                await asyncio.sleep(BULK_DELAY_SECONDS)
+
+        if chunk:
+            if len(chunk) == 1:
+                try:
+                    await chunk[0].delete()
+                    deleted += 1
+                except Exception:
+                    pass
+                await asyncio.sleep(DELETE_DELAY_SECONDS)
+            else:
+                try:
+                    await channel.delete_messages(chunk)
+                    deleted += len(chunk)
+                except discord.HTTPException:
+                    for m in chunk:
+                        try:
+                            await m.delete()
+                            deleted += 1
+                        except Exception:
+                            pass
+                        await asyncio.sleep(DELETE_DELAY_SECONDS)
+
     return deleted
+
 
 
 class AutoPruneCog(commands.Cog):
