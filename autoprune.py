@@ -7,6 +7,43 @@ from typing import Optional
 from discord import app_commands
 from discord.ext import commands, tasks
 
+# Auto-prune interval (minutes). Set AUTOPRUNE_INTERVAL_MINUTES on Railway to change cadence.
+def _get_autoprune_interval_minutes() -> float:
+    """Return interval minutes (default 120). Clamped to [5, 1440]."""
+    import os
+    raw = os.getenv("AUTOPRUNE_INTERVAL_MINUTES")
+    if raw is None or str(raw).strip() == "":
+        # Back-compat: allow hours variable
+        raw_h = os.getenv("AUTOPRUNE_INTERVAL_HOURS")
+        if raw_h is not None and str(raw_h).strip() != "":
+            try:
+                minutes = float(raw_h) * 60.0
+            except Exception:
+                minutes = 120.0
+        else:
+            minutes = 120.0
+    else:
+        try:
+            minutes = float(raw)
+        except Exception:
+            minutes = 120.0
+    if minutes < 5.0:
+        minutes = 5.0
+    if minutes > 1440.0:
+        minutes = 1440.0
+    return minutes
+
+AUTOPRUNE_INTERVAL_MINUTES = _get_autoprune_interval_minutes()
+
+def _interval_human() -> str:
+    mins = AUTOPRUNE_INTERVAL_MINUTES
+    if abs(mins - round(mins)) < 1e-9:
+        mins = int(round(mins))
+    if mins % 60 == 0:
+        hrs = mins // 60
+        return f"{hrs} hour" + ("s" if hrs != 1 else "")
+    return f"{mins} minute" + ("s" if mins != 1 else "")
+
 from data_manager import (
     get_autoprune_channels,
     set_autoprune_channel,
@@ -185,7 +222,7 @@ async def _prune_channel(
 
 class AutoPruneCog(commands.Cog):
     """
-    Every 2 hours, prunes configured channels, deleting oldest messages while keeping the last N.
+    On the configured interval, prunes channels by deleting oldest messages while keeping the last N.
     """
 
     def __init__(self, bot: commands.Bot):
@@ -195,7 +232,7 @@ class AutoPruneCog(commands.Cog):
     def cog_unload(self):
         self.prune_loop.cancel()
 
-    @tasks.loop(hours=2)
+    @tasks.loop(minutes=AUTOPRUNE_INTERVAL_MINUTES)
     async def prune_loop(self):
         await self.bot.wait_until_ready()
 
@@ -241,13 +278,13 @@ class AutoPruneCog(commands.Cog):
 
     @app_commands.command(
         name="autoprune_enable",
-        description="Automatically delete oldest messages every 2 hours, keeping the last N.",
+        description="Automatically delete oldest messages on an interval, keeping the last N.",
     )
     @app_commands.describe(
         channel="Channel to prune",
         keep_last="How many messages to keep (default 10)",
         include_pinned="If true, pinned messages can be deleted and count toward the keep_last total",
-        max_deletes_per_run="Max messages to delete per 2-hour run (default 100)",
+        max_deletes_per_run="Max messages to delete per run (default 100)",
     )
     @app_commands.checks.has_permissions(manage_messages=True)
     async def autoprune_enable(
@@ -285,7 +322,7 @@ class AutoPruneCog(commands.Cog):
         asyncio.create_task(_kickoff_first_run())
 
         await interaction.response.send_message(
-            f"Auto-prune enabled for {channel.mention} (first run started now; then every 2 hours, keeps last {keep_last}, "
+            f"Auto-prune enabled for {channel.mention} (first run started now; then every {_interval_human()}, keeps last {keep_last}, "
             f"{'includes' if include_pinned else 'excludes'} pinned, max {max_deletes_per_run} deletes/run).",
             ephemeral=True,
         )
