@@ -1,7 +1,9 @@
-import os
+﻿import os
+import sys
+import logging
 import discord
 
-# from bm_asa import setup_bm_asa  #  moved behind a feature flag (see on_ready)
+# from bm_asa import setup_bm_asa  # â† moved behind a feature flag (see on_ready)
 from arkstatus_asa import setup_arkstatus_asa
 from discord.ext import commands
 from discord import app_commands
@@ -23,42 +25,52 @@ from timers import TimerCog
 from gen_timers import setup_gen_timers, build_gen_timetable_embed
 from logging_cog import LoggingCog
 
-# ── Screenshot ingest API (safe import) ─────────────────────────────────────
-try:
-    from screenshots_api import setup_screenshot_api, run_fastapi_in_thread
-except Exception:
-    setup_screenshot_api = None
-    run_fastapi_in_thread = None
-# ───────────────────────────────────────────────────────────────────────────
 
 load_dotenv()
+
+
+def _configure_logging() -> None:
+    """Route logs to stdout (Railway marks stderr as error) and reduce noisy library INFO logs."""
+    level_name = (os.getenv("LOG_LEVEL", "INFO") or "INFO").upper()
+    level = getattr(logging, level_name, logging.INFO)
+
+    root = logging.getLogger()
+    root.setLevel(level)
+
+    # Remove existing stream handlers to avoid duplicates / stderr routing
+    for h in list(root.handlers):
+        if isinstance(h, logging.StreamHandler):
+            root.removeHandler(h)
+
+    stream = logging.StreamHandler(sys.stdout)
+    stream.setLevel(level)
+    stream.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
+    root.addHandler(stream)
+
+    # Quiet discord.py gateway resume/connect chatter by default
+    if os.getenv("QUIET_DISCORD_LOGS", "1") == "1":
+        logging.getLogger("discord").setLevel(logging.WARNING)
+        logging.getLogger("discord.client").setLevel(logging.WARNING)
+        logging.getLogger("discord.gateway").setLevel(logging.WARNING)
+        logging.getLogger("discord.http").setLevel(logging.WARNING)
+
+
+_configure_logging()
 TOKEN = os.getenv("DISCORD_TOKEN")
 GUILD_ID = int(os.getenv("GUILD_ID", 0))
 
 intents = discord.Intents.default()
 bot = commands.Bot(command_prefix=commands.when_mentioned, intents=intents)
 
-# ── Start FastAPI in a background thread; defer worker until loop exists ───
-if setup_screenshot_api and run_fastapi_in_thread:
-    try:
-        # CHANGED: setup returns (app, start_worker) now
-        api_app, start_screenshot_worker = setup_screenshot_api(bot)
-        run_fastapi_in_thread(api_app, int(os.getenv("PORT", "8080")))
-        # stash starter to call inside on_ready
-        bot._start_screenshot_worker = start_screenshot_worker
-        print("[screenshots_api] http server started")
-    except Exception as e:
-        print(f"[screenshots_api] not started: {e}")
-# ───────────────────────────────────────────────────────────────────────────
 
 # Category sort order for embed building and sort_list
 CATEGORY_EMOJIS = {
-    "Owner": "👑",
-    "Friend": "🟢",
-    "Ally": "🔵",
-    "Beta": "🟡",
-    "Enemy": "🔴",
-    "Item": "⚫",
+    "Owner": "ðŸ‘‘",
+    "Friend": "ðŸŸ¢",
+    "Ally": "ðŸ”µ",
+    "Beta": "ðŸŸ¡",
+    "Enemy": "ðŸ”´",
+    "Item": "âš«",
 }
 
 # --- Embed safety helpers (avoid 1024-char field value limit) ---
@@ -66,12 +78,12 @@ EMBED_FIELD_VALUE_MAX = 1024
 
 
 def add_chunked_comment_field(embed: discord.Embed, comment_text: str) -> None:
-    """Add a comment as one or more fields, each ≤1024 chars, keeping italics."""
+    """Add a comment as one or more fields, each â‰¤1024 chars, keeping italics."""
     if not comment_text:
         return
     s = str(comment_text)
     if len(s) <= EMBED_FIELD_VALUE_MAX:
-        embed.add_field(name="​", value=f"*{s}*", inline=False)
+        embed.add_field(name="â€‹", value=f"*{s}*", inline=False)
         return
 
     parts = []
@@ -84,13 +96,13 @@ def add_chunked_comment_field(embed: discord.Embed, comment_text: str) -> None:
     total = len(parts)
     for i, part in enumerate(parts, start=1):
         suffix = "" if i == 1 else f" (cont. {i}/{total})"
-        embed.add_field(name=f"​{suffix}", value=f"*{part}*", inline=False)
+        embed.add_field(name=f"â€‹{suffix}", value=f"*{part}*", inline=False)
 
 
 CATEGORY_ORDER = ["Category", "Text", "Bullet"] + list(CATEGORY_EMOJIS.keys())
 
 
-#  helper: update a deployed regular-list dashboard 
+# â”â”â” helper: update a deployed regular-list dashboard â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
 async def update_list_dashboard(list_name: str):
     dash = get_dashboard_id(list_name)
     if not dash:
@@ -109,7 +121,7 @@ async def update_list_dashboard(list_name: str):
         pass
 
 
-#  embed builder for regular lists 
+# â”â”â” embed builder for regular lists â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
 def build_embed(list_name: str) -> discord.Embed:
     # Load original data and compute per-type ordinals in the ORIGINAL order,
     # so indices match what the edit/move/assign commands expect.
@@ -152,22 +164,22 @@ def build_embed(list_name: str) -> discord.Embed:
         if cat == "Category":
             # Show the user-facing index for categories
             ord_cat = it.get("_ord_cat", 0)
-            embed.add_field(name="​", value=f"**{ord_cat}. {it['name']}**", inline=False)
+            embed.add_field(name="â€‹", value=f"**{ord_cat}. {it['name']}**", inline=False)
 
         elif cat == "Text":
             ord_text = it.get("_ord_text", 0)
-            # Put the index in the field name so it’s easy to reference
-            embed.add_field(name=f"{ord_text}. {it['name']}", value="​", inline=False)
+            # Put the index in the field name so itâ€™s easy to reference
+            embed.add_field(name=f"{ord_text}. {it['name']}", value="â€‹", inline=False)
 
         elif cat == "Bullet":
             ord_bul = it.get("_ord_bullet", 0)
-            embed.add_field(name=f"{ord_bul}. • {it['name']}", value="​", inline=False)
+            embed.add_field(name=f"{ord_bul}. â€¢ {it['name']}", value="â€‹", inline=False)
 
         else:
             # Named entries get an index that matches the /assign_to_category entry_index for "Name"
             ord_name = it.get("_ord_name", 0)
             prefix = CATEGORY_EMOJIS.get(cat, "")
-            embed.add_field(name=f"{prefix}   {ord_name}. {it['name']}", value="​", inline=False)
+            embed.add_field(name=f"{prefix}   {ord_name}. {it['name']}", value="â€‹", inline=False)
 
             # Preserve your existing comment handling (chunking elsewhere)
             if it.get("comment"):
@@ -207,7 +219,7 @@ async def on_ready():
 
     await setup_gen_timers(bot)
 
-    # ── Feature flag: BattleMetrics (enable/disable via env) ────────────────
+    # â”€â”€ Feature flag: BattleMetrics (enable/disable via env) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     if os.getenv("ENABLE_BATTLEMETRICS", "True") == "True":
         try:
             from bm_asa import setup_bm_asa  # import only if enabled
@@ -247,31 +259,20 @@ async def on_ready():
     else:
         await bot.tree.sync()
 
-    # Start screenshot worker once the loop is alive (runs only once)
-    if getattr(bot, "_start_screenshot_worker", None) and not getattr(
-        bot, "_shot_worker_started", False
-    ):
-        try:
-            await bot._start_screenshot_worker()
-            bot._shot_worker_started = True
-            print("[screenshots_api] worker started")
-        except Exception as e:
-            print(f"[screenshots_api] worker not started: {e}")
-
     bot._startup_done = True
     print(f"Logged in as {bot.user} (ID: {bot.user.id})")
 
 
-#  List CRUD 
+# â”â”â” List CRUD â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
 @bot.tree.command(name="create_list", description="Create a new list")
 @app_commands.describe(name="Name of the new list")
 async def create_list_cmd(interaction: discord.Interaction, name: str):
     if list_exists(name):
         return await interaction.response.send_message(
-            f"⚠ List '{name}' already exists.", ephemeral=True
+            f"âš ï¸ List '{name}' already exists.", ephemeral=True
         )
     save_list(name, [])
-    await interaction.response.send_message(f"✅ Created list '{name}'.", ephemeral=True)
+    await interaction.response.send_message(f"âœ… Created list '{name}'.", ephemeral=True)
 
 
 @bot.tree.command(name="delete_list", description="Delete an existing list")
@@ -279,25 +280,25 @@ async def create_list_cmd(interaction: discord.Interaction, name: str):
 async def delete_list_cmd(interaction: discord.Interaction, name: str):
     if not list_exists(name):
         return await interaction.response.send_message(
-            f" No list named '{name}'.", ephemeral=True
+            f"âŒ No list named '{name}'.", ephemeral=True
         )
     delete_list(name)
-    await interaction.response.send_message(f"✅ Deleted list '{name}'.", ephemeral=True)
+    await interaction.response.send_message(f"âœ… Deleted list '{name}'.", ephemeral=True)
 
 
-#  Plain text entries 
+# â”â”â” Plain text entries â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
 @bot.tree.command(name="add_list_category", description="Add a category header to a list")
 @app_commands.describe(list_name="List to modify", title="Category title")
 async def add_list_category(interaction: discord.Interaction, list_name: str, title: str):
     if not list_exists(list_name):
         return await interaction.response.send_message(
-            f" No list named '{list_name}'.", ephemeral=True
+            f"âŒ No list named '{list_name}'.", ephemeral=True
         )
     data = load_list(list_name)
     data.append({"category": "Category", "name": title})
     save_list(list_name, data)
     await interaction.response.send_message(
-        f"✅ Added category to '{list_name}': **{title}**", ephemeral=True
+        f"âœ… Added category to '{list_name}': **{title}**", ephemeral=True
     )
     await update_list_dashboard(list_name)
 
@@ -311,16 +312,16 @@ async def edit_list_category(
 ):
     if not list_exists(list_name):
         return await interaction.response.send_message(
-            f" No list named '{list_name}'.", ephemeral=True
+            f"âŒ No list named '{list_name}'.", ephemeral=True
         )
     data = load_list(list_name)
     idxs = [i for i, x in enumerate(data) if x["category"] == "Category"]
     if index < 1 or index > len(idxs):
-        return await interaction.response.send_message(" Invalid category index.", ephemeral=True)
+        return await interaction.response.send_message("âŒ Invalid category index.", ephemeral=True)
     data[idxs[index - 1]]["name"] = new_title
     save_list(list_name, data)
     await interaction.response.send_message(
-        f"✅ Updated category #{index} to **{new_title}**", ephemeral=True
+        f"âœ… Updated category #{index} to **{new_title}**", ephemeral=True
     )
     await update_list_dashboard(list_name)
 
@@ -330,33 +331,33 @@ async def edit_list_category(
 async def remove_list_category(interaction: discord.Interaction, list_name: str, index: int):
     if not list_exists(list_name):
         return await interaction.response.send_message(
-            f" No list named '{list_name}'.", ephemeral=True
+            f"âŒ No list named '{list_name}'.", ephemeral=True
         )
     data = load_list(list_name)
     idxs = [i for i, x in enumerate(data) if x["category"] == "Category"]
     if index < 1 or index > len(idxs):
-        return await interaction.response.send_message(" Invalid category index.", ephemeral=True)
+        return await interaction.response.send_message("âŒ Invalid category index.", ephemeral=True)
     removed = data.pop(idxs[index - 1])
     save_list(list_name, data)
     await interaction.response.send_message(
-        f"✅ Removed category #{index}: **{removed['name']}**", ephemeral=True
+        f"âœ… Removed category #{index}: **{removed['name']}**", ephemeral=True
     )
     await update_list_dashboard(list_name)
 
 
-#  Plain text entries 
+# â”â”â” Plain text entries â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
 @bot.tree.command(name="add_text", description="Add a plain text line to a list")
 @app_commands.describe(list_name="List to modify", text="Text line to add")
 async def add_text(interaction: discord.Interaction, list_name: str, text: str):
     if not list_exists(list_name):
         return await interaction.response.send_message(
-            f" No list named '{list_name}'.", ephemeral=True
+            f"âŒ No list named '{list_name}'.", ephemeral=True
         )
     data = load_list(list_name)
     data.append({"category": "Text", "name": text})
     save_list(list_name, data)
     await interaction.response.send_message(
-        f"✅ Added text to '{list_name}': {text}", ephemeral=True
+        f"âœ… Added text to '{list_name}': {text}", ephemeral=True
     )
     await update_list_dashboard(list_name)
 
@@ -368,15 +369,15 @@ async def add_text(interaction: discord.Interaction, list_name: str, text: str):
 async def edit_text(interaction: discord.Interaction, list_name: str, index: int, new_text: str):
     if not list_exists(list_name):
         return await interaction.response.send_message(
-            f" No list named '{list_name}'.", ephemeral=True
+            f"âŒ No list named '{list_name}'.", ephemeral=True
         )
     data = load_list(list_name)
     txt_idxs = [i for i, x in enumerate(data) if x["category"] == "Text"]
     if index < 1 or index > len(txt_idxs):
-        return await interaction.response.send_message(" Invalid text index.", ephemeral=True)
+        return await interaction.response.send_message("âŒ Invalid text index.", ephemeral=True)
     data[txt_idxs[index - 1]]["name"] = new_text
     save_list(list_name, data)
-    await interaction.response.send_message(f"✅ Updated text #{index}.", ephemeral=True)
+    await interaction.response.send_message(f"âœ… Updated text #{index}.", ephemeral=True)
     await update_list_dashboard(list_name)
 
 
@@ -385,33 +386,33 @@ async def edit_text(interaction: discord.Interaction, list_name: str, index: int
 async def remove_text(interaction: discord.Interaction, list_name: str, index: int):
     if not list_exists(list_name):
         return await interaction.response.send_message(
-            f" No list named '{list_name}'.", ephemeral=True
+            f"âŒ No list named '{list_name}'.", ephemeral=True
         )
     data = load_list(list_name)
     txt_idxs = [i for i, x in enumerate(data) if x["category"] == "Text"]
     if index < 1 or index > len(txt_idxs):
-        return await interaction.response.send_message(" Invalid text index.", ephemeral=True)
+        return await interaction.response.send_message("âŒ Invalid text index.", ephemeral=True)
     removed = data.pop(txt_idxs[index - 1])
     save_list(list_name, data)
     await interaction.response.send_message(
-        f"✅ Removed text #{index}: {removed['name']}", ephemeral=True
+        f"âœ… Removed text #{index}: {removed['name']}", ephemeral=True
     )
     await update_list_dashboard(list_name)
 
 
-#  Bullet entries 
+# â”â”â” Bullet entries â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
 @bot.tree.command(name="add_bullet", description="Add a bullet entry to a list")
 @app_commands.describe(list_name="List to modify", bullet="Bullet point to add")
 async def add_bullet(interaction: discord.Interaction, list_name: str, bullet: str):
     if not list_exists(list_name):
         return await interaction.response.send_message(
-            f" No list named '{list_name}'.", ephemeral=True
+            f"âŒ No list named '{list_name}'.", ephemeral=True
         )
     data = load_list(list_name)
     data.append({"category": "Bullet", "name": bullet})
     save_list(list_name, data)
     await interaction.response.send_message(
-        f"✅ Added bullet to '{list_name}': • {bullet}", ephemeral=True
+        f"âœ… Added bullet to '{list_name}': â€¢ {bullet}", ephemeral=True
     )
     await update_list_dashboard(list_name)
 
@@ -425,15 +426,15 @@ async def edit_bullet(
 ):
     if not list_exists(list_name):
         return await interaction.response.send_message(
-            f" No list named '{list_name}'.", ephemeral=True
+            f"âŒ No list named '{list_name}'.", ephemeral=True
         )
     data = load_list(list_name)
     bul_idxs = [i for i, x in enumerate(data) if x["category"] == "Bullet"]
     if index < 1 or index > len(bul_idxs):
-        return await interaction.response.send_message(" Invalid bullet index.", ephemeral=True)
+        return await interaction.response.send_message("âŒ Invalid bullet index.", ephemeral=True)
     data[bul_idxs[index - 1]]["name"] = new_bullet
     save_list(list_name, data)
-    await interaction.response.send_message(f"✅ Updated bullet #{index}.", ephemeral=True)
+    await interaction.response.send_message(f"âœ… Updated bullet #{index}.", ephemeral=True)
     await update_list_dashboard(list_name)
 
 
@@ -442,21 +443,21 @@ async def edit_bullet(
 async def remove_bullet(interaction: discord.Interaction, list_name: str, index: int):
     if not list_exists(list_name):
         return await interaction.response.send_message(
-            f" No list named '{list_name}'.", ephemeral=True
+            f"âŒ No list named '{list_name}'.", ephemeral=True
         )
     data = load_list(list_name)
     bul_idxs = [i for i, x in enumerate(data) if x["category"] == "Bullet"]
     if index < 1 or index > len(bul_idxs):
-        return await interaction.response.send_message(" Invalid bullet index.", ephemeral=True)
+        return await interaction.response.send_message("âŒ Invalid bullet index.", ephemeral=True)
     removed = data.pop(bul_idxs[index - 1])
     save_list(list_name, data)
     await interaction.response.send_message(
-        f"✅ Removed bullet #{index}: {removed['name']}", ephemeral=True
+        f"âœ… Removed bullet #{index}: {removed['name']}", ephemeral=True
     )
     await update_list_dashboard(list_name)
 
 
-#  Entries CRUD with dropdowns 
+# â”â”â” Entries CRUD with dropdowns â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
 @bot.tree.command(name="add_name", description="Add an entry with category")
 @app_commands.describe(
     list_name="List to modify", entry_name="Entry to add", category="Category for entry"
@@ -479,7 +480,7 @@ async def add_name(
 ):
     if not list_exists(list_name):
         return await interaction.response.send_message(
-            f" No list named '{list_name}'.", ephemeral=True
+            f"âŒ No list named '{list_name}'.", ephemeral=True
         )
     data = load_list(list_name)
     if any(
@@ -488,12 +489,12 @@ async def add_name(
         for e in data
     ):
         return await interaction.response.send_message(
-            f" `{entry_name}` already exists in `{list_name}`.", ephemeral=True
+            f"âŒ `{entry_name}` already exists in `{list_name}`.", ephemeral=True
         )
     data.append({"category": category.value, "name": entry_name})
     save_list(list_name, data)
     await interaction.response.send_message(
-        f"✅ Added {CATEGORY_EMOJIS[category.value]} **{entry_name}** as {category.value}",
+        f"âœ… Added {CATEGORY_EMOJIS[category.value]} **{entry_name}** as {category.value}",
         ephemeral=True,
     )
     await update_list_dashboard(list_name)
@@ -504,7 +505,7 @@ async def add_name(
 async def remove_name(interaction: discord.Interaction, list_name: str, entry_name: str):
     if not list_exists(list_name):
         return await interaction.response.send_message(
-            f" No list named '{list_name}'.", ephemeral=True
+            f"âŒ No list named '{list_name}'.", ephemeral=True
         )
     data = load_list(list_name)
     for i, it in enumerate(data):
@@ -516,11 +517,11 @@ async def remove_name(interaction: discord.Interaction, list_name: str, entry_na
             data.pop(i)
             save_list(list_name, data)
             await interaction.response.send_message(
-                f"✅ Removed **{entry_name}**.", ephemeral=True
+                f"âœ… Removed **{entry_name}**.", ephemeral=True
             )
             await update_list_dashboard(list_name)
             return
-    await interaction.response.send_message(f" Entry '{entry_name}' not found.", ephemeral=True)
+    await interaction.response.send_message(f"âŒ Entry '{entry_name}' not found.", ephemeral=True)
 
 
 @bot.tree.command(name="edit_name", description="Rename an entry & change category")
@@ -549,7 +550,7 @@ async def edit_name(
 ):
     if not list_exists(list_name):
         return await interaction.response.send_message(
-            f" No list named '{list_name}'.", ephemeral=True
+            f"âŒ No list named '{list_name}'.", ephemeral=True
         )
     data = load_list(list_name)
     for it in data:
@@ -558,12 +559,12 @@ async def edit_name(
             it["category"] = category.value
             save_list(list_name, data)
             await interaction.response.send_message(
-                f"✅ Renamed **{old_name}**→**{new_name}** & set category to {category.value}",
+                f"âœ… Renamed **{old_name}**â†’**{new_name}** & set category to {category.value}",
                 ephemeral=True,
             )
             await update_list_dashboard(list_name)
             return
-    await interaction.response.send_message(f" Entry '{old_name}' not found.", ephemeral=True)
+    await interaction.response.send_message(f"âŒ Entry '{old_name}' not found.", ephemeral=True)
 
 
 @bot.tree.command(name="move_name", description="Move an entry")
@@ -575,7 +576,7 @@ async def move_name(
 ):
     if not list_exists(list_name):
         return await interaction.response.send_message(
-            f" No list named '{list_name}'.", ephemeral=True
+            f"âŒ No list named '{list_name}'.", ephemeral=True
         )
     data = load_list(list_name)
     for idx, it in enumerate(data):
@@ -584,13 +585,13 @@ async def move_name(
             break
     else:
         return await interaction.response.send_message(
-            f" Entry '{entry_name}' not found.", ephemeral=True
+            f"âŒ Entry '{entry_name}' not found.", ephemeral=True
         )
     pos = max(1, min(position, len(data) + 1))
     data.insert(pos - 1, entry)
     save_list(list_name, data)
     await interaction.response.send_message(
-        f"✅ Moved **{entry_name}** to position {pos}.", ephemeral=True
+        f"âœ… Moved **{entry_name}** to position {pos}.", ephemeral=True
     )
     await update_list_dashboard(list_name)
 
@@ -600,7 +601,7 @@ async def move_name(
 async def sort_list(interaction: discord.Interaction, list_name: str):
     if not list_exists(list_name):
         return await interaction.response.send_message(
-            f" No list named '{list_name}'.", ephemeral=True
+            f"âŒ No list named '{list_name}'.", ephemeral=True
         )
     data = load_list(list_name)
     categories = [it for it in data if it["category"] == "Category"]
@@ -614,11 +615,11 @@ async def sort_list(interaction: discord.Interaction, list_name: str):
         sorted_entries.extend(grp)
     new_data = categories + texts + bullets + sorted_entries
     save_list(list_name, new_data)
-    await interaction.response.send_message(f"✅ Sorted items in '{list_name}'.", ephemeral=True)
+    await interaction.response.send_message(f"âœ… Sorted items in '{list_name}'.", ephemeral=True)
     await update_list_dashboard(list_name)
 
 
-#  Comments 
+# â”â”â” Comments â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
 # (Only applies to named entries)
 @bot.tree.command(name="add_comment", description="Add a comment to an entry")
 @app_commands.describe(
@@ -629,7 +630,7 @@ async def add_comment(
 ):
     if not list_exists(list_name):
         return await interaction.response.send_message(
-            f" No list named '{list_name}'.", ephemeral=True
+            f"âŒ No list named '{list_name}'.", ephemeral=True
         )
     data = load_list(list_name)
     for it in data:
@@ -637,11 +638,11 @@ async def add_comment(
             it["comment"] = comment
             save_list(list_name, data)
             await interaction.response.send_message(
-                f"✅ Comment added to **{entry_name}**.", ephemeral=True
+                f"âœ… Comment added to **{entry_name}**.", ephemeral=True
             )
             await update_list_dashboard(list_name)
             return
-    await interaction.response.send_message(f" Entry '{entry_name}' not found.", ephemeral=True)
+    await interaction.response.send_message(f"âŒ Entry '{entry_name}' not found.", ephemeral=True)
 
 
 @bot.tree.command(name="edit_comment", description="Edit a comment")
@@ -653,7 +654,7 @@ async def edit_comment(
 ):
     if not list_exists(list_name):
         return await interaction.response.send_message(
-            f" No list named '{list_name}'.", ephemeral=True
+            f"âŒ No list named '{list_name}'.", ephemeral=True
         )
     data = load_list(list_name)
     for it in data:
@@ -661,11 +662,11 @@ async def edit_comment(
             it["comment"] = new_comment
             save_list(list_name, data)
             await interaction.response.send_message(
-                f"✅ Comment updated for **{entry_name}**.", ephemeral=True
+                f"âœ… Comment updated for **{entry_name}**.", ephemeral=True
             )
             await update_list_dashboard(list_name)
             return
-    await interaction.response.send_message(f" No comment on '{entry_name}'.", ephemeral=True)
+    await interaction.response.send_message(f"âŒ No comment on '{entry_name}'.", ephemeral=True)
 
 
 @bot.tree.command(name="remove_comment", description="Remove a comment")
@@ -673,7 +674,7 @@ async def edit_comment(
 async def remove_comment(interaction: discord.Interaction, list_name: str, entry_name: str):
     if not list_exists(list_name):
         return await interaction.response.send_message(
-            f" No list named '{list_name}'.", ephemeral=True
+            f"âŒ No list named '{list_name}'.", ephemeral=True
         )
     data = load_list(list_name)
     for it in data:
@@ -681,14 +682,14 @@ async def remove_comment(interaction: discord.Interaction, list_name: str, entry
             del it["comment"]
             save_list(list_name, data)
             await interaction.response.send_message(
-                f"✅ Removed comment from **{entry_name}**.", ephemeral=True
+                f"âœ… Removed comment from **{entry_name}**.", ephemeral=True
             )
             await update_list_dashboard(list_name)
             return
-    await interaction.response.send_message(f" Entry '{entry_name}' not found.", ephemeral=True)
+    await interaction.response.send_message(f"âŒ Entry '{entry_name}' not found.", ephemeral=True)
 
 
-#  Assign to Category 
+# â”â”â” Assign to Category â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
 @bot.tree.command(name="assign_to_category", description="Move an entry under a specific category")
 @app_commands.describe(
     list_name="List to modify",
@@ -712,16 +713,16 @@ async def assign_to_category(
 ):
     if not list_exists(list_name):
         return await interaction.response.send_message(
-            f" No list named '{list_name}'.", ephemeral=True
+            f"âŒ No list named '{list_name}'.", ephemeral=True
         )
     data = load_list(list_name)
     cat_idxs = [i for i, v in enumerate(data) if v["category"] == "Category"]
     if not cat_idxs:
         return await interaction.response.send_message(
-            " No categories in this list.", ephemeral=True
+            "âŒ No categories in this list.", ephemeral=True
         )
     if category_index < 1 or category_index > len(cat_idxs):
-        return await interaction.response.send_message(" Invalid category index.", ephemeral=True)
+        return await interaction.response.send_message("âŒ Invalid category index.", ephemeral=True)
     et = entry_type.value
     if et == "Text":
         pos_list = [i for i, v in enumerate(data) if v["category"] == "Text"]
@@ -732,7 +733,7 @@ async def assign_to_category(
             i for i, v in enumerate(data) if v["category"] not in ("Category", "Text", "Bullet")
         ]
     if entry_index < 1 or entry_index > len(pos_list):
-        return await interaction.response.send_message(f" Invalid {et} index.", ephemeral=True)
+        return await interaction.response.send_message(f"âŒ Invalid {et} index.", ephemeral=True)
     entry = data.pop(pos_list[entry_index - 1])
     # recompute category positions after removal
     new_cat_idxs = [i for i, v in enumerate(data) if v["category"] == "Category"]
@@ -740,19 +741,19 @@ async def assign_to_category(
     data.insert(insert_at, entry)
     save_list(list_name, data)
     await interaction.response.send_message(
-        f"✅ Moved {et} #{entry_index} under category #{category_index}.", ephemeral=True
+        f"âœ… Moved {et} #{entry_index} under category #{category_index}.", ephemeral=True
     )
     await update_list_dashboard(list_name)
 
 
-#  Viewing & Deploy 
+# â”â”â” Viewing & Deploy â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
 @bot.tree.command(name="view_lists", description="List all your lists")
 async def view_lists_cmd(interaction: discord.Interaction):
     names = get_all_list_names()
     if not names:
-        return await interaction.response.send_message("⚠ No lists found.", ephemeral=True)
+        return await interaction.response.send_message("âš ï¸ No lists found.", ephemeral=True)
     await interaction.response.send_message(
-        "📋 Lists:\n" + "\n".join(f"- `{n}`" for n in sorted(names)), ephemeral=True
+        "ðŸ“‹ Lists:\n" + "\n".join(f"- `{n}`" for n in sorted(names)), ephemeral=True
     )
 
 
@@ -760,13 +761,13 @@ async def view_lists_cmd(interaction: discord.Interaction):
 async def view_gen_lists_cmd(interaction: discord.Interaction):
     names = get_all_gen_list_names()
     if not names:
-        return await interaction.response.send_message("⚠ No gen lists found.", ephemeral=True)
+        return await interaction.response.send_message("âš ï¸ No gen lists found.", ephemeral=True)
     await interaction.response.send_message(
-        "📊 Gen lists:\n" + "\n".join(f"- `{n}`" for n in sorted(names)), ephemeral=True
+        "ðŸ“Š Gen lists:\n" + "\n".join(f"- `{n}`" for n in sorted(names)), ephemeral=True
     )
 
 
-#  Deploy 
+# â”â”â” Deploy â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
 @bot.tree.command(name="deploy_list", description="Deploy/update a regular list")
 @app_commands.describe(name="Name of the list")
 async def deploy_list_cmd(interaction: discord.Interaction, name: str):
@@ -776,7 +777,7 @@ async def deploy_list_cmd(interaction: discord.Interaction, name: str):
         sent = await interaction.original_response()
         save_dashboard_id(name, sent.channel.id, sent.id)
     else:
-        await interaction.response.send_message(f" No list named '{name}'.", ephemeral=True)
+        await interaction.response.send_message(f"âŒ No list named '{name}'.", ephemeral=True)
 
 
 @bot.tree.command(name="deploy_gen_list", description="Deploy/update a generator dashboard")
@@ -789,16 +790,16 @@ async def deploy_gen_list_cmd(interaction: discord.Interaction, name: str):
         save_gen_dashboard_id(name, sent.channel.id, sent.id)
     else:
         await interaction.response.send_message(
-            f" No generator list named '{name}'.", ephemeral=True
+            f"âŒ No generator list named '{name}'.", ephemeral=True
         )
 
 
-#  Help & Logs 
+# â”â”â” Help & Logs â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
 @bot.tree.command(name="help", description="Show usage instructions")
 async def help_cmd(interaction: discord.Interaction):
     # Build an embed-based help to avoid the 2000-char message content limit.
     embed = discord.Embed(
-        title="Gravity List — Commands",
+        title="Gravity List â€” Commands",
         description="Clean dashboards for names, notes, timers, generators, and server status.",
         color=discord.Color.blurple(),
     )
@@ -819,92 +820,92 @@ async def help_cmd(interaction: discord.Interaction):
         total = len(chunks)
         for i, chunk in enumerate(chunks, start=1):
             name = f"{title} ({i}/{total})" if total > 1 else title
-            embed.add_field(name=name, value=chunk or "​", inline=False)
+            embed.add_field(name=name, value=chunk or "â€‹", inline=False)
 
-    # — Regular lists —
+    # â€” Regular lists â€”
     add_section(
-        "Regular Lists — Create, View, Deploy",
+        "Regular Lists â€” Create, View, Deploy",
         [
-            "• `/view_lists` — list your lists",
-            "• `/deploy_list name:<list>` — (re)render a list in-channel",
-            "• `/create_list`, `/delete_list`",
+            "â€¢ `/view_lists` â€” list your lists",
+            "â€¢ `/deploy_list name:<list>` â€” (re)render a list in-channel",
+            "â€¢ `/create_list`, `/delete_list`",
         ],
     )
 
     add_section(
-        "Regular Lists — Organize & Edit",
+        "Regular Lists â€” Organize & Edit",
         [
-            "• Categories: `/add_list_category`, `/edit_list_category`, `/remove_list_category`",
-            "• Text: `/add_text`, `/edit_text`, `/remove_text`",
-            "• Bullets: `/add_bullet`, `/edit_bullet`, `/remove_bullet`",
-            "• Names: `/add_name`, `/remove_name`, `/edit_name`, `/move_name`, `/sort_list`",
-            "• Comments on names: `/add_comment`, `/edit_comment`, `/remove_comment`",
-            "• Assign items under a category: `/assign_to_category`",
+            "â€¢ Categories: `/add_list_category`, `/edit_list_category`, `/remove_list_category`",
+            "â€¢ Text: `/add_text`, `/edit_text`, `/remove_text`",
+            "â€¢ Bullets: `/add_bullet`, `/edit_bullet`, `/remove_bullet`",
+            "â€¢ Names: `/add_name`, `/remove_name`, `/edit_name`, `/move_name`, `/sort_list`",
+            "â€¢ Comments on names: `/add_comment`, `/edit_comment`, `/remove_comment`",
+            "â€¢ Assign items under a category: `/assign_to_category`",
             "_Tip: Indices are shown in the list embed so index-based commands are easy to use._",
         ],
     )
 
-    # — Generator lists & timers —
+    # â€” Generator lists & timers â€”
     add_section(
         "Generator Lists (Fuel Timers)",
         [
-            "• `/view_gen_lists`, `/deploy_gen_list name:<gen_list>`",
-            "• Create/delete: `/create_gen_list`, `/delete_gen_list`",
-            "• Tek: `/add_gen_tek`, `/edit_gen_tek`, `/update_all_gens_tek`",
-            "• Electrical: `/add_gen_electrical`, `/edit_gen_electrical`, `/update_all_gens_electrical`",
-            "• Remove generator: `/remove_gen`",
-            "• Reorder: `/reorder_gen`",
-            "• Ping role: `/set_gen_role`",
-            "• Mute/unmute: `/mute_gen_alerts`, `/unmute_gen_alerts`",
-            "_Gen dashboards auto-refresh; LOW=≤12h remaining; EMPTY=0._",
+            "â€¢ `/view_gen_lists`, `/deploy_gen_list name:<gen_list>`",
+            "â€¢ Create/delete: `/create_gen_list`, `/delete_gen_list`",
+            "â€¢ Tek: `/add_gen_tek`, `/edit_gen_tek`, `/update_all_gens_tek`",
+            "â€¢ Electrical: `/add_gen_electrical`, `/edit_gen_electrical`, `/update_all_gens_electrical`",
+            "â€¢ Remove generator: `/remove_gen`",
+            "â€¢ Reorder: `/reorder_gen`",
+            "â€¢ Ping role: `/set_gen_role`",
+            "â€¢ Mute/unmute: `/mute_gen_alerts`, `/unmute_gen_alerts`",
+            "_Gen dashboards auto-refresh; LOW=â‰¤12h remaining; EMPTY=0._",
         ],
     )
 
     add_section(
         "Standalone Timers",
         [
-            "• `/create_timer`, `/pause_timer`, `/resume_timer`, `/edit_timer`, `/delete_timer`",
+            "â€¢ `/create_timer`, `/pause_timer`, `/resume_timer`, `/edit_timer`, `/delete_timer`",
         ],
     )
 
-    # — Server dashboards —
+    # â€” Server dashboards â€”
     add_section(
-        "ASA Official — BattleMetrics",
+        "ASA Official â€” BattleMetrics",
         [
-            "• `/bm_asa_server_query server_id:<bm_id>` — one-off snapshot",
-            "• `/bm_asa_dashboard_start` / `/bm_asa_dashboard_stop` / `/bm_asa_dashboard_refresh`",
+            "â€¢ `/bm_asa_server_query server_id:<bm_id>` â€” one-off snapshot",
+            "â€¢ `/bm_asa_dashboard_start` / `/bm_asa_dashboard_stop` / `/bm_asa_dashboard_refresh`",
             "_Uses BattleMetrics public API; free tier limits may apply._",
         ],
     )
 
     add_section(
-        "ASA — Ark Status",
+        "ASA â€” Ark Status",
         [
-            "• `/as_server_query target:<ArkStatus ID or Name>` — one-off snapshot",
-            "• `/as_dashboard_start` / `/as_dashboard_stop` / `/as_dashboard_refresh`",
+            "â€¢ `/as_server_query target:<ArkStatus ID or Name>` â€” one-off snapshot",
+            "â€¢ `/as_dashboard_start` / `/as_dashboard_stop` / `/as_dashboard_refresh`",
             "_Env: `AS_API_KEY` (required), `AS_CHANNEL_ID`, `AS_TARGETS`; optional: `AS_REFRESH_SEC`, `AS_TIER`._",
         ],
     )
 
-    # — Downloads —
+    # â€” Downloads â€”
     add_section(
-        "Downloads — Gravity Capture",
+        "Downloads â€” Gravity Capture",
         [
-            "• `/download_grav_capture` — buttons for the latest **Installer (.exe)** and **Portable (.zip)** from GitHub Releases",
-            "• `/grav_capture_version` — latest tag + checksum files (.sha256)",
+            "â€¢ `/download_grav_capture` â€” buttons for the latest **Installer (.exe)** and **Portable (.zip)** from GitHub Releases",
+            "â€¢ `/grav_capture_version` â€” latest tag + checksum files (.sha256)",
             "_Repo is configurable via env: `GC_REPO_OWNER`, `GC_REPO_NAME`; optional `GITHUB_TOKEN` for higher rate limits._",
         ],
     )
 
-    # — Diagnostics & admin —
+    # â€” Diagnostics & admin â€”
     add_section(
         "Diagnostics",
         [
-            "• `/diag summary` — deployment/uptime/thresholds/maintenance",
-            "• `/diag tail_logs [lines]` — in-memory log tail",
-            "• `/diag ratelimit` — 429 counts (15m/1h/24h)",
-            "• `/diag set_disconnect_threshold seconds:<int>` — store override",
-            "• `/diag maintenance on|off [note]` — toggle maintenance flag",
+            "â€¢ `/diag summary` â€” deployment/uptime/thresholds/maintenance",
+            "â€¢ `/diag tail_logs [lines]` â€” in-memory log tail",
+            "â€¢ `/diag ratelimit` â€” 429 counts (15m/1h/24h)",
+            "â€¢ `/diag set_disconnect_threshold seconds:<int>` â€” store override",
+            "â€¢ `/diag maintenance on|off [note]` â€” toggle maintenance flag",
             "_Set `DEBUG_POST_DEPLOY=1` to announce new deployments in the log channel._",
         ],
     )
@@ -912,7 +913,7 @@ async def help_cmd(interaction: discord.Interaction):
     add_section(
         "Administration",
         [
-            "• `/set_log_channel` — set the channel where the bot posts logs/alerts (admin only)",
+            "â€¢ `/set_log_channel` â€” set the channel where the bot posts logs/alerts (admin only)",
         ],
     )
 

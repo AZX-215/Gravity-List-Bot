@@ -13,8 +13,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy source
 COPY . .
 
-# Railway will route to this; our app binds to $PORT (or 8080)
+# This is a background worker (Discord bot). No HTTP server is required.
+# EXPOSE is optional; keeping it does not affect execution.
 EXPOSE 8080
 
-# Start the bot (FastAPI server is started in-process by bot.py)
+# Start the bot
 CMD ["python", "bot.py"]

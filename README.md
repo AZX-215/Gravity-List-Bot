@@ -62,7 +62,6 @@ The bot can write warnings/errors and short heartbeat summaries to a private Dis
 
 /set_log_channel #ops-logs # admin only
 
-ext.
 
 ---
 
@@ -149,8 +148,6 @@ Requested permissions in servers
 
     Send Messages, Embed Links, Read Message History
 
-    Attach Files (if using screenshots worker)
-
     Manage Messages (optional: if you want the bot to tidy its own posts)
 
     Use Slash Commands
@@ -191,9 +188,9 @@ alongside this bot. It’s an auxiliary service that ingests server logs and for
 
     Status: active development (not yet feature-complete)
 
-    Goal: become a fully-functioning log bot—alerts, searchable history, and screenshot attachments that complement Gravity List dashboards
+    Goal: become a fully-functioning ops/log bot—alerts, searchable history, and structured summaries that complement Gravity List dashboards
 
-    Integration: the Gravity List bot already includes a small screenshots worker; GravityCapture will expand on that with robust pipelines and moderation-friendly summaries.
+    Integration: GravityCapture is a separate service/app; Gravity List does not handle screenshot ingest.
 
 Stay tuned on the GravityCapture repo for milestones and usage docs.
 🗺️ Roadmap

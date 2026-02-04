@@ -16,53 +16,136 @@ except Exception:
     DEBUG_STATE = None
 
 
-class DiscordLogHandler(logging.Handler):
-    """Buffers log records and periodically sends them to a Discord channel."""
 
-    def __init__(self, bot, channel_id, level=logging.INFO, interval=10):
+class _DropNoisyLogsFilter(logging.Filter):
+    """Reduce high-frequency, low-signal library logs."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        try:
+            name = record.name or ""
+            msg = record.getMessage() or ""
+        except Exception:
+            return True
+
+        # Drop discord.py gateway resume/connect INFO chatter
+        if name.startswith("discord.gateway") and record.levelno < logging.WARNING:
+            return False
+        if "has successfully RESUMED session" in msg and record.levelno < logging.WARNING:
+            return False
+
+        # Drop uvicorn access noise (if present)
+        if name.startswith("uvicorn") and record.levelno < logging.WARNING:
+            return False
+
+        return True
+
+
+class DiscordLogHandler(logging.Handler):
+    """Buffers log records and periodically sends them to a Discord channel.
+
+    - Chunks output to stay under Discord's 2000-character limit.
+    - Uses a flush lock to avoid overlapping sends.
+    - Applies a filter to drop low-signal high-frequency library INFO lines.
+    """
+
+    def __init__(
+        self,
+        bot: commands.Bot,
+        channel_id: int,
+        level: int = logging.WARNING,
+        interval: int = 10,
+        max_lines_per_flush: int = 200,
+    ):
         super().__init__(level)
         self.bot = bot
         self.channel_id = channel_id
         self.interval = interval
-        self.buffer = []
-        self.last_sent = 0
-        self._flush_lock = asyncio.Lock()
-        self._flush_task = None
+        self.max_lines_per_flush = max_lines_per_flush
 
-    def emit(self, record):
+        self.buffer: list[str] = []
+        self.last_sent = 0.0
+        self._flush_lock = asyncio.Lock()
+        self._flush_task: asyncio.Task | None = None
+
+        self.addFilter(_DropNoisyLogsFilter())
+
+    def emit(self, record: logging.LogRecord) -> None:
         try:
             msg = self.format(record)
             self.buffer.append(msg)
-            now = time.time()
-            if now - self.last_sent >= self.interval:
-                # Avoid spawning many concurrent flush tasks
-                if self._flush_task is None or self._flush_task.done():
-                    self._flush_task = asyncio.create_task(self.flush())
-        except Exception:
-            pass
 
-    async def flush(self):
+            # Keep the buffer bounded
+            if len(self.buffer) > self.max_lines_per_flush * 5:
+                self.buffer = self.buffer[-self.max_lines_per_flush * 5 :]
+
+            now = time.time()
+            if now - self.last_sent < self.interval:
+                return
+
+            # Avoid spawning multiple flush tasks
+            if self._flush_task and not self._flush_task.done():
+                return
+
+            # Only schedule if there's a running loop
+            try:
+                asyncio.get_running_loop()
+            except RuntimeError:
+                return
+
+            self._flush_task = asyncio.create_task(self.flush())
+        except Exception:
+            # Never raise from logging
+            return
+
+    async def flush(self) -> None:
         async with self._flush_lock:
             if not self.buffer:
                 return
 
             channel = self.bot.get_channel(self.channel_id)
             if not channel:
-                return
-
-            joined = "\n".join(self.buffer)
-            self.buffer.clear()
-
-            # Chunk to avoid Discord 2000-char limit (include code fences)
-            max_payload = 1900
-            for i in range(0, len(joined), max_payload):
-                chunk = joined[i : i + max_payload]
                 try:
-                    await channel.send(f"```{chunk}```")
+                    channel = await self.bot.fetch_channel(self.channel_id)
                 except Exception:
-                    pass
+                    return
+
+            # Take a batch of lines to send
+            batch = self.buffer[: self.max_lines_per_flush]
+            del self.buffer[: self.max_lines_per_flush]
+
+            # Chunk into <= 2000 chars including code fences
+            chunks: list[list[str]] = []
+            cur: list[str] = []
+            cur_len = 0
+            for line in batch:
+                # +1 for newline
+                add_len = len(line) + (1 if cur else 0)
+                # Allow room for code fences
+                if cur and (cur_len + add_len + 8) > 1990:
+                    chunks.append(cur)
+                    cur = [line]
+                    cur_len = len(line)
+                else:
+                    if cur:
+                        cur_len += 1 + len(line)
+                        cur.append(line)
+                    else:
+                        cur = [line]
+                        cur_len = len(line)
+            if cur:
+                chunks.append(cur)
+
+            for lines_chunk in chunks:
+                content = "```\n" + "\n".join(lines_chunk) + "\n```"
+                try:
+                    await channel.send(content)
+                except Exception:
+                    # If a chunk fails, stop to avoid spamming retries
+                    break
+                await asyncio.sleep(0.8)
 
             self.last_sent = time.time()
+
 
 def _fmt_duration(seconds: float) -> str:
     seconds = int(seconds)
@@ -89,12 +172,18 @@ class LoggingCog(commands.Cog):
 
         # Root logger to channel (buffered)
         root = logging.getLogger()
-        root.setLevel(logging.INFO)
+        # Do not override root level if already configured (bot.py sets it)
+        if root.level in (logging.NOTSET, 0):
+            root.setLevel(logging.INFO)
 
         channel_id = os.getenv("LOG_CHANNEL_ID")
         if channel_id:
-            handler = DiscordLogHandler(bot, int(channel_id), level=logging.INFO, interval=10)
-            formatter = logging.Formatter("%(asctime)s %(levelname)s: %(message)s")
+            level_name = (os.getenv("LOG_CHANNEL_LEVEL", "WARNING") or "WARNING").upper()
+            ch_level = getattr(logging, level_name, logging.WARNING)
+            flush_sec = int(os.getenv("LOG_CHANNEL_FLUSH_SEC", "10") or "10")
+            max_lines = int(os.getenv("LOG_CHANNEL_MAX_LINES", "200") or "200")
+            handler = DiscordLogHandler(bot, int(channel_id), level=ch_level, interval=flush_sec, max_lines_per_flush=max_lines)
+            formatter = logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
             handler.setFormatter(formatter)
             root.addHandler(handler)
             self.handler = handler
