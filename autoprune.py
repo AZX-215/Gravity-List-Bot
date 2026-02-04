@@ -269,8 +269,23 @@ class AutoPruneCog(commands.Cog):
             max_deletes_per_run=max_deletes_per_run,
         )
 
+        # Kick off the first run immediately (in the background) so enable takes effect right away.
+        async def _kickoff_first_run():
+            try:
+                me = _guild_me(channel.guild, self.bot)
+                if me is None:
+                    return
+                perms = channel.permissions_for(me)
+                if not perms.manage_messages:
+                    return
+                await _prune_channel(channel, keep_last, include_pinned, max_deletes_per_run)
+            except Exception:
+                return
+
+        asyncio.create_task(_kickoff_first_run())
+
         await interaction.response.send_message(
-            f"Auto-prune enabled for {channel.mention} (checks every 2 hours, keeps last {keep_last}, "
+            f"Auto-prune enabled for {channel.mention} (first run started now; then every 2 hours, keeps last {keep_last}, "
             f"{'includes' if include_pinned else 'excludes'} pinned, max {max_deletes_per_run} deletes/run).",
             ephemeral=True,
         )
