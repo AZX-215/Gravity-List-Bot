@@ -875,17 +875,6 @@ async def help_cmd(interaction: discord.Interaction):
             "_Env: `AS_API_KEY` (required), `AS_CHANNEL_ID`, `AS_TARGETS`; optional: `AS_REFRESH_SEC`, `AS_TIER`._",
         ],
     )
-
-    # â€” Downloads â€”
-    add_section(
-        "Downloads â€” Gravity Capture",
-        [
-            "â€¢ `/download_grav_capture` â€” buttons for the latest **Installer (.exe)** and **Portable (.zip)** from GitHub Releases",
-            "â€¢ `/grav_capture_version` â€” latest tag + checksum files (.sha256)",
-            "_Repo is configurable via env: `GC_REPO_OWNER`, `GC_REPO_NAME`; optional `GITHUB_TOKEN` for higher rate limits._",
-        ],
-    )
-
     # â€” Diagnostics & admin â€”
     add_section(
         "Diagnostics",

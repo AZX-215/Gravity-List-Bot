@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import os
 from datetime import timedelta
 
@@ -10,7 +11,6 @@ from discord.ext import commands, tasks
 # Auto-prune interval (minutes). Set AUTOPRUNE_INTERVAL_MINUTES on Railway to change cadence.
 def _get_autoprune_interval_minutes() -> float:
     """Return interval minutes (default 120). Clamped to [5, 1440]."""
-    import os
     raw = os.getenv("AUTOPRUNE_INTERVAL_MINUTES")
     if raw is None or str(raw).strip() == "":
         # Back-compat: allow hours variable
@@ -27,22 +27,26 @@ def _get_autoprune_interval_minutes() -> float:
             minutes = float(raw)
         except Exception:
             minutes = 120.0
+
     if minutes < 5.0:
         minutes = 5.0
     if minutes > 1440.0:
         minutes = 1440.0
     return minutes
 
+
 AUTOPRUNE_INTERVAL_MINUTES = _get_autoprune_interval_minutes()
+
 
 def _interval_human() -> str:
     mins = AUTOPRUNE_INTERVAL_MINUTES
     if abs(mins - round(mins)) < 1e-9:
         mins = int(round(mins))
-    if mins % 60 == 0:
+    if isinstance(mins, int) and mins % 60 == 0:
         hrs = mins // 60
         return f"{hrs} hour" + ("s" if hrs != 1 else "")
     return f"{mins} minute" + ("s" if mins != 1 else "")
+
 
 from data_manager import (
     get_autoprune_channels,
@@ -51,6 +55,12 @@ from data_manager import (
 )
 
 
+LOG = logging.getLogger("glb.autoprune")
+
+# Logging controls (for Railway stdout; separate from Discord log-channel levels)
+LOG_TICKS = os.getenv("AUTOPRUNE_LOG_TICKS", "1").strip().lower() not in {"0", "false", "no"}
+LOG_NOOP = os.getenv("AUTOPRUNE_LOG_NOOP", "1").strip().lower() not in {"0", "false", "no"}
+LOG_SKIPS = os.getenv("AUTOPRUNE_LOG_SKIPS", "1").strip().lower() not in {"0", "false", "no"}
 
 
 def _guild_me(guild: discord.Guild, bot: commands.Bot):
@@ -61,10 +71,9 @@ def _guild_me(guild: discord.Guild, bot: commands.Bot):
 
 
 DELETE_DELAY_SECONDS = float(os.getenv("AUTOPRUNE_DELETE_DELAY_SECONDS", "1.10"))
-USE_BULK_DELETE = os.getenv("AUTOPRUNE_USE_BULK_DELETE", "1").strip().lower() not in {"0","false","no"}
+USE_BULK_DELETE = os.getenv("AUTOPRUNE_USE_BULK_DELETE", "1").strip().lower() not in {"0", "false", "no"}
 BULK_SAFE_DAYS = float(os.getenv("AUTOPRUNE_BULK_SAFE_DAYS", "13.5"))  # keep under 14d hard limit
 BULK_DELAY_SECONDS = float(os.getenv("AUTOPRUNE_BULK_DELAY_SECONDS", "0.80"))
-
 
 
 async def _resolve_channel(bot: commands.Bot, channel_id: int):
@@ -82,10 +91,11 @@ async def _find_cutoff_message(
     keep_last: int,
     include_pinned: bool,
 ) -> Optional[discord.Message]:
-    """
-    Returns the oldest message that should be kept.
-    - If include_pinned is True: keeps last N messages total.
-    - If include_pinned is False: keeps last N NON-PINNED messages (pins are preserved and ignored for the count).
+    """Return the oldest message that should be kept.
+
+    - include_pinned=True: keeps last N messages total.
+    - include_pinned=False: keeps last N NON-PINNED messages (pins preserved and ignored for the count).
+
     If the channel has fewer than N keepable messages, returns None.
     """
     if keep_last <= 0:
@@ -97,7 +107,6 @@ async def _find_cutoff_message(
             return None
         return min(keep, key=lambda m: m.id)
 
-    # Keep last N non-pinned
     kept = []
     async for m in channel.history(limit=None, oldest_first=False):
         if getattr(m, "pinned", False):
@@ -105,6 +114,7 @@ async def _find_cutoff_message(
         kept.append(m)
         if len(kept) >= keep_last:
             break
+
     if len(kept) < keep_last:
         return None
     return min(kept, key=lambda m: m.id)
@@ -116,8 +126,8 @@ async def _prune_channel(
     include_pinned: bool,
     max_deletes_per_run: int,
 ) -> int:
-    """
-    Deletes oldest messages (optionally excluding pinned) so that only the latest N are kept.
+    """Delete oldest messages so that only the latest N are kept.
+
     Uses bulk delete for messages newer than ~14 days to reduce rate limits.
     Returns number of messages deleted this run.
     """
@@ -157,7 +167,7 @@ async def _prune_channel(
         except Exception:
             old_msgs.append(msg)
 
-    # Always delete oldest messages first (older ones will typically be oldest)
+    # Always delete oldest messages first
     for msg in old_msgs:
         try:
             await msg.delete()
@@ -219,11 +229,8 @@ async def _prune_channel(
     return deleted
 
 
-
 class AutoPruneCog(commands.Cog):
-    """
-    On the configured interval, prunes channels by deleting oldest messages while keeping the last N.
-    """
+    """On the configured interval, prunes channels by deleting oldest messages while keeping the last N."""
 
     def __init__(self, bot: commands.Bot):
         self.bot = bot
@@ -236,6 +243,16 @@ class AutoPruneCog(commands.Cog):
     async def prune_loop(self):
         await self.bot.wait_until_ready()
 
+        if LOG_TICKS:
+            try:
+                LOG.info(
+                    "[autoprune] tick interval=%s guilds=%d",
+                    _interval_human(),
+                    len(self.bot.guilds),
+                )
+            except Exception:
+                pass
+
         # iterate all guilds the bot is in
         for guild in self.bot.guilds:
             channels = get_autoprune_channels(guild.id)
@@ -246,28 +263,63 @@ class AutoPruneCog(commands.Cog):
                 try:
                     ch_id = int(ch_id_str)
                 except Exception:
+                    if LOG_SKIPS:
+                        LOG.warning("[autoprune] invalid channel id in config: %r (guild=%s)", ch_id_str, guild.id)
                     continue
 
                 channel = await _resolve_channel(self.bot, ch_id)
                 if not isinstance(channel, discord.TextChannel):
+                    if LOG_SKIPS:
+                        LOG.warning("[autoprune] channel not found or not text: %s (guild=%s)", ch_id, guild.id)
                     continue
 
                 keep_last = int(cfg.get("keep_last", 10))
                 include_pinned = bool(cfg.get("include_pinned", False))
                 max_deletes = int(cfg.get("max_deletes_per_run", 100))
 
-                # If the bot can't manage messages, skip silently
+                # If the bot can't manage messages, skip (but log why)
                 me = _guild_me(channel.guild, self.bot)
                 if me is None:
+                    if LOG_SKIPS:
+                        LOG.warning("[autoprune] unable to resolve bot member (guild=%s channel=%s)", guild.id, channel.id)
                     continue
+
                 perms = channel.permissions_for(me)
                 if not perms.manage_messages:
+                    if LOG_SKIPS:
+                        LOG.warning(
+                            "[autoprune] missing Manage Messages; skipping (guild=%s channel=%s #%s)",
+                            guild.id,
+                            channel.id,
+                            channel.name,
+                        )
                     continue
 
                 try:
-                    await _prune_channel(channel, keep_last, include_pinned, max_deletes)
+                    deleted = await _prune_channel(channel, keep_last, include_pinned, max_deletes)
+                    if deleted > 0:
+                        LOG.info(
+                            "[autoprune] deleted=%d (guild=%s channel=%s #%s keep_last=%d include_pinned=%s max=%d)",
+                            deleted,
+                            guild.id,
+                            channel.id,
+                            channel.name,
+                            keep_last,
+                            include_pinned,
+                            max_deletes,
+                        )
+                    else:
+                        if LOG_NOOP:
+                            LOG.info(
+                                "[autoprune] no-op (guild=%s channel=%s #%s keep_last=%d include_pinned=%s)",
+                                guild.id,
+                                channel.id,
+                                channel.name,
+                                keep_last,
+                                include_pinned,
+                            )
                 except Exception:
-                    # Never let one channel kill the whole loop
+                    LOG.exception("[autoprune] run failed (guild=%s channel=%s)", guild.id, channel.id)
                     continue
 
     @prune_loop.before_loop
@@ -298,6 +350,22 @@ class AutoPruneCog(commands.Cog):
         keep_last = max(1, min(int(keep_last), 200))
         max_deletes_per_run = max(1, min(int(max_deletes_per_run), 500))
 
+        # Validate bot perms now, so we don't "enable" something that can never run.
+        me = _guild_me(channel.guild, self.bot)
+        if me is None:
+            await interaction.response.send_message(
+                f"Unable to resolve the bot member in this server. Try again in a moment.",
+                ephemeral=True,
+            )
+            return
+        perms = channel.permissions_for(me)
+        if not perms.manage_messages:
+            await interaction.response.send_message(
+                f"I can't enable auto-prune in {channel.mention} because I'm missing **Manage Messages** there.",
+                ephemeral=True,
+            )
+            return
+
         set_autoprune_channel(
             guild_id=interaction.guild_id,
             channel_id=channel.id,
@@ -309,15 +377,25 @@ class AutoPruneCog(commands.Cog):
         # Kick off the first run immediately (in the background) so enable takes effect right away.
         async def _kickoff_first_run():
             try:
-                me = _guild_me(channel.guild, self.bot)
-                if me is None:
-                    return
-                perms = channel.permissions_for(me)
-                if not perms.manage_messages:
-                    return
-                await _prune_channel(channel, keep_last, include_pinned, max_deletes_per_run)
+                deleted = await _prune_channel(channel, keep_last, include_pinned, max_deletes_per_run)
+                if deleted > 0:
+                    LOG.info(
+                        "[autoprune] kickoff deleted=%d (guild=%s channel=%s #%s)",
+                        deleted,
+                        interaction.guild_id,
+                        channel.id,
+                        channel.name,
+                    )
+                else:
+                    if LOG_NOOP:
+                        LOG.info(
+                            "[autoprune] kickoff no-op (guild=%s channel=%s #%s)",
+                            interaction.guild_id,
+                            channel.id,
+                            channel.name,
+                        )
             except Exception:
-                return
+                LOG.exception("[autoprune] kickoff failed (guild=%s channel=%s)", interaction.guild_id, channel.id)
 
         asyncio.create_task(_kickoff_first_run())
 
@@ -399,13 +477,30 @@ class AutoPruneCog(commands.Cog):
             )
             return
 
-
         keep_last = int(cfg.get("keep_last", 10))
         include_pinned = bool(cfg.get("include_pinned", False))
         max_deletes = int(cfg.get("max_deletes_per_run", 100))
 
         await interaction.response.defer(ephemeral=True, thinking=True)
         deleted = await _prune_channel(channel, keep_last, include_pinned, max_deletes)
+
+        if deleted > 0:
+            LOG.info(
+                "[autoprune] manual deleted=%d (guild=%s channel=%s #%s)",
+                deleted,
+                interaction.guild_id,
+                channel.id,
+                channel.name,
+            )
+        else:
+            if LOG_NOOP:
+                LOG.info(
+                    "[autoprune] manual no-op (guild=%s channel=%s #%s)",
+                    interaction.guild_id,
+                    channel.id,
+                    channel.name,
+                )
+
         await interaction.followup.send(f"Auto-prune complete for {channel.mention}. Deleted {deleted} message(s).")
 
 
