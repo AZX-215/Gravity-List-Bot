@@ -2,11 +2,17 @@ import asyncio
 import logging
 import os
 from datetime import timedelta
+from typing import Optional
 
 import discord
-from typing import Optional
 from discord import app_commands
 from discord.ext import commands, tasks
+
+from data_manager import (
+    get_autoprune_channels,
+    remove_autoprune_channel,
+    set_autoprune_channel,
+)
 
 # Auto-prune interval (minutes). Set AUTOPRUNE_INTERVAL_MINUTES on Railway to change cadence.
 def _get_autoprune_interval_minutes() -> float:
@@ -46,13 +52,6 @@ def _interval_human() -> str:
         hrs = mins // 60
         return f"{hrs} hour" + ("s" if hrs != 1 else "")
     return f"{mins} minute" + ("s" if mins != 1 else "")
-
-
-from data_manager import (
-    get_autoprune_channels,
-    set_autoprune_channel,
-    remove_autoprune_channel,
-)
 
 
 LOG = logging.getLogger("glb.autoprune")
@@ -354,7 +353,7 @@ class AutoPruneCog(commands.Cog):
         me = _guild_me(channel.guild, self.bot)
         if me is None:
             await interaction.response.send_message(
-                f"Unable to resolve the bot member in this server. Try again in a moment.",
+                "Unable to resolve the bot member in this server. Try again in a moment.",
                 ephemeral=True,
             )
             return
