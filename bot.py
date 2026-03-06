@@ -67,14 +67,14 @@ bot = commands.Bot(command_prefix=commands.when_mentioned, intents=intents)
 # Use explicit Unicode escapes here so category icons stay stable even if the file
 # gets edited on a system/editor with bad encoding defaults.
 CATEGORY_EMOJIS = {
-    "Owner": "👑",      # 👑
-    "Alpha": "⭐",          # ⭐
-    "Friend": "🟢",     # 🟢
-    "Ally": "🔵",       # 🔵
-    "Beta": "🟡",       # 🟡
-    "Beach Bob": "👶",  # 👶
-    "Enemy": "🔴",      # 🔴
-    "Item": "⚫",           # ⚫
+    "Owner": "\U0001F451",      # Crown
+    "Alpha": "\u2B50",          # Star
+    "Friend": "\U0001F7E2",     # Green circle
+    "Ally": "\U0001F535",       # Blue circle
+    "Beta": "\U0001F7E1",       # Yellow circle
+    "Beach Bob": "\U0001F476",  # Baby
+    "Enemy": "\U0001F534",      # Red circle
+    "Item": "\u26AB",           # Black circle
 }
 
 NAMED_ENTRY_CATEGORY_CHOICES = [
@@ -82,9 +82,31 @@ NAMED_ENTRY_CATEGORY_CHOICES = [
     for category_name in CATEGORY_EMOJIS.keys()
 ]
 
-ZERO_WIDTH_SPACE = "​"
-BULLET = "•"
-RIGHT_ARROW = "→"
+ZERO_WIDTH_SPACE = "\u200B"
+BULLET = "\u2022"
+RIGHT_ARROW = "\u2192"
+
+# Repair known mojibake sequences from older bot.py builds or bad source encodings.
+_MOJIBAKE_REPLACEMENTS = {
+    "ðŸ‘‘": "\U0001F451",
+    "ðŸŸ¢": "\U0001F7E2",
+    "ðŸ”µ": "\U0001F535",
+    "ðŸŸ¡": "\U0001F7E1",
+    "ðŸ”´": "\U0001F534",
+    "âš«": "\u26AB",
+    "â€‹": "\u200B",
+    "â€¢": "\u2022",
+    "â†’": "\u2192",
+    "â­": "\u2B50",
+    "ðŸ‘¶": "\U0001F476",
+}
+
+def repair_mojibake(text: str) -> str:
+    if not isinstance(text, str) or not text:
+        return text
+    for bad, good in _MOJIBAKE_REPLACEMENTS.items():
+        text = text.replace(bad, good)
+    return text
 
 # --- Embed safety helpers (avoid 1024-char field value limit) ---
 EMBED_FIELD_VALUE_MAX = 1024
@@ -94,7 +116,7 @@ def add_chunked_comment_field(embed: discord.Embed, comment_text: str) -> None:
     """Add a comment as one or more fields, each â‰¤1024 chars, keeping italics."""
     if not comment_text:
         return
-    s = str(comment_text)
+    s = repair_mojibake(str(comment_text))
     if len(s) <= EMBED_FIELD_VALUE_MAX:
         embed.add_field(name=ZERO_WIDTH_SPACE, value=f"*{s}*", inline=False)
         return
@@ -177,26 +199,26 @@ def build_embed(list_name: str) -> discord.Embed:
         if cat == "Category":
             # Show the user-facing index for categories
             ord_cat = it.get("_ord_cat", 0)
-            embed.add_field(name=ZERO_WIDTH_SPACE, value=f"**{ord_cat}. {it['name']}**", inline=False)
+            embed.add_field(name=ZERO_WIDTH_SPACE, value=f"**{ord_cat}. {repair_mojibake(it['name'])}**", inline=False)
 
         elif cat == "Text":
             ord_text = it.get("_ord_text", 0)
             # Put the index in the field name so itâ€™s easy to reference
-            embed.add_field(name=f"{ord_text}. {it['name']}", value=ZERO_WIDTH_SPACE, inline=False)
+            embed.add_field(name=f"{ord_text}. {repair_mojibake(it['name'])}", value=ZERO_WIDTH_SPACE, inline=False)
 
         elif cat == "Bullet":
             ord_bul = it.get("_ord_bullet", 0)
-            embed.add_field(name=f"{ord_bul}. {BULLET} {it['name']}", value=ZERO_WIDTH_SPACE, inline=False)
+            embed.add_field(name=f"{ord_bul}. {BULLET} {repair_mojibake(it['name'])}", value=ZERO_WIDTH_SPACE, inline=False)
 
         else:
             # Named entries get an index that matches the /assign_to_category entry_index for "Name"
             ord_name = it.get("_ord_name", 0)
-            prefix = CATEGORY_EMOJIS.get(cat, "")
-            embed.add_field(name=f"{prefix}   {ord_name}. {it['name']}", value=ZERO_WIDTH_SPACE, inline=False)
+            prefix = repair_mojibake(CATEGORY_EMOJIS.get(cat, ""))
+            embed.add_field(name=f"{prefix}   {ord_name}. {repair_mojibake(it['name'])}", value=ZERO_WIDTH_SPACE, inline=False)
 
             # Preserve your existing comment handling (chunking elsewhere)
             if it.get("comment"):
-                add_chunked_comment_field(embed, it["comment"])
+                add_chunked_comment_field(embed, repair_mojibake(it["comment"]))
 
     return embed
 
