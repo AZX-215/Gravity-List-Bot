@@ -64,14 +64,27 @@ bot = commands.Bot(command_prefix=commands.when_mentioned, intents=intents)
 
 
 # Category sort order for embed building and sort_list
+# Use explicit Unicode escapes here so category icons stay stable even if the file
+# gets edited on a system/editor with bad encoding defaults.
 CATEGORY_EMOJIS = {
-    "Owner": "ðŸ‘‘",
-    "Friend": "ðŸŸ¢",
-    "Ally": "ðŸ”µ",
-    "Beta": "ðŸŸ¡",
-    "Enemy": "ðŸ”´",
-    "Item": "âš«",
+    "Owner": "👑",      # 👑
+    "Alpha": "⭐",          # ⭐
+    "Friend": "🟢",     # 🟢
+    "Ally": "🔵",       # 🔵
+    "Beta": "🟡",       # 🟡
+    "Beach Bob": "👶",  # 👶
+    "Enemy": "🔴",      # 🔴
+    "Item": "⚫",           # ⚫
 }
+
+NAMED_ENTRY_CATEGORY_CHOICES = [
+    app_commands.Choice(name=category_name, value=category_name)
+    for category_name in CATEGORY_EMOJIS.keys()
+]
+
+ZERO_WIDTH_SPACE = "​"
+BULLET = "•"
+RIGHT_ARROW = "→"
 
 # --- Embed safety helpers (avoid 1024-char field value limit) ---
 EMBED_FIELD_VALUE_MAX = 1024
@@ -83,7 +96,7 @@ def add_chunked_comment_field(embed: discord.Embed, comment_text: str) -> None:
         return
     s = str(comment_text)
     if len(s) <= EMBED_FIELD_VALUE_MAX:
-        embed.add_field(name="â€‹", value=f"*{s}*", inline=False)
+        embed.add_field(name=ZERO_WIDTH_SPACE, value=f"*{s}*", inline=False)
         return
 
     parts = []
@@ -96,7 +109,7 @@ def add_chunked_comment_field(embed: discord.Embed, comment_text: str) -> None:
     total = len(parts)
     for i, part in enumerate(parts, start=1):
         suffix = "" if i == 1 else f" (cont. {i}/{total})"
-        embed.add_field(name=f"â€‹{suffix}", value=f"*{part}*", inline=False)
+        embed.add_field(name=f"{ZERO_WIDTH_SPACE}{suffix}", value=f"*{part}*", inline=False)
 
 
 CATEGORY_ORDER = ["Category", "Text", "Bullet"] + list(CATEGORY_EMOJIS.keys())
@@ -164,22 +177,22 @@ def build_embed(list_name: str) -> discord.Embed:
         if cat == "Category":
             # Show the user-facing index for categories
             ord_cat = it.get("_ord_cat", 0)
-            embed.add_field(name="â€‹", value=f"**{ord_cat}. {it['name']}**", inline=False)
+            embed.add_field(name=ZERO_WIDTH_SPACE, value=f"**{ord_cat}. {it['name']}**", inline=False)
 
         elif cat == "Text":
             ord_text = it.get("_ord_text", 0)
             # Put the index in the field name so itâ€™s easy to reference
-            embed.add_field(name=f"{ord_text}. {it['name']}", value="â€‹", inline=False)
+            embed.add_field(name=f"{ord_text}. {it['name']}", value=ZERO_WIDTH_SPACE, inline=False)
 
         elif cat == "Bullet":
             ord_bul = it.get("_ord_bullet", 0)
-            embed.add_field(name=f"{ord_bul}. â€¢ {it['name']}", value="â€‹", inline=False)
+            embed.add_field(name=f"{ord_bul}. {BULLET} {it['name']}", value=ZERO_WIDTH_SPACE, inline=False)
 
         else:
             # Named entries get an index that matches the /assign_to_category entry_index for "Name"
             ord_name = it.get("_ord_name", 0)
             prefix = CATEGORY_EMOJIS.get(cat, "")
-            embed.add_field(name=f"{prefix}   {ord_name}. {it['name']}", value="â€‹", inline=False)
+            embed.add_field(name=f"{prefix}   {ord_name}. {it['name']}", value=ZERO_WIDTH_SPACE, inline=False)
 
             # Preserve your existing comment handling (chunking elsewhere)
             if it.get("comment"):
@@ -401,7 +414,7 @@ async def add_bullet(interaction: discord.Interaction, list_name: str, bullet: s
     data.append({"category": "Bullet", "name": bullet})
     save_list(list_name, data)
     await interaction.response.send_message(
-        f"âœ… Added bullet to '{list_name}': â€¢ {bullet}", ephemeral=True
+        f"âœ… Added bullet to '{list_name}': {BULLET} {bullet}", ephemeral=True
     )
     await update_list_dashboard(list_name)
 
@@ -451,16 +464,7 @@ async def remove_bullet(interaction: discord.Interaction, list_name: str, index:
 @app_commands.describe(
     list_name="List to modify", entry_name="Entry to add", category="Category for entry"
 )
-@app_commands.choices(
-    category=[
-        app_commands.Choice(name="Owner", value="Owner"),
-        app_commands.Choice(name="Friend", value="Friend"),
-        app_commands.Choice(name="Ally", value="Ally"),
-        app_commands.Choice(name="Beta", value="Beta"),
-        app_commands.Choice(name="Enemy", value="Enemy"),
-        app_commands.Choice(name="Item", value="Item"),
-    ]
-)
+@app_commands.choices(category=NAMED_ENTRY_CATEGORY_CHOICES)
 async def add_name(
     interaction: discord.Interaction,
     list_name: str,
@@ -520,16 +524,7 @@ async def remove_name(interaction: discord.Interaction, list_name: str, entry_na
     new_name="New entry name",
     category="New category",
 )
-@app_commands.choices(
-    category=[
-        app_commands.Choice(name="Owner", value="Owner"),
-        app_commands.Choice(name="Friend", value="Friend"),
-        app_commands.Choice(name="Ally", value="Ally"),
-        app_commands.Choice(name="Beta", value="Beta"),
-        app_commands.Choice(name="Enemy", value="Enemy"),
-        app_commands.Choice(name="Item", value="Item"),
-    ]
-)
+@app_commands.choices(category=NAMED_ENTRY_CATEGORY_CHOICES)
 async def edit_name(
     interaction: discord.Interaction,
     list_name: str,
@@ -548,7 +543,7 @@ async def edit_name(
             it["category"] = category.value
             save_list(list_name, data)
             await interaction.response.send_message(
-                f"âœ… Renamed **{old_name}**â†’**{new_name}** & set category to {category.value}",
+                f"âœ… Renamed **{old_name}** {RIGHT_ARROW} **{new_name}** & set category to {category.value}",
                 ephemeral=True,
             )
             await update_list_dashboard(list_name)
@@ -809,7 +804,7 @@ async def help_cmd(interaction: discord.Interaction):
         total = len(chunks)
         for i, chunk in enumerate(chunks, start=1):
             name = f"{title} ({i}/{total})" if total > 1 else title
-            embed.add_field(name=name, value=chunk or "â€‹", inline=False)
+            embed.add_field(name=name, value=chunk or ZERO_WIDTH_SPACE, inline=False)
 
     # â€” Regular lists â€”
     add_section(
