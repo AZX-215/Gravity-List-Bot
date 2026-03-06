@@ -1,20 +1,18 @@
-name-template: "v$RESOLVED_VERSION"
-tag-template: "v$RESOLVED_VERSION"
-change-template: "- $TITLE (#$NUMBER) by @$AUTHOR"
-categories:
-  - title: "🚀 Features"
-    labels: ["feature", "enhancement"]
-  - title: "🐛 Fixes"
-    labels: ["bug", "fix"]
-  - title: "🧰 Maintenance"
-    labels: ["chore", "deps", "refactor", "docs"]
-version-resolver:
-  major:
-    labels: ["major"]
-  minor:
-    labels: ["minor", "feature"]
-  patch:
-    labels: ["patch", "fix", "chore", "deps"]
-template: |
-  ## Changes
-  $CHANGES
+name: Release Drafter
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    types: [opened, reopened, synchronize, edited, labeled, unlabeled, closed]
+permissions:
+  contents: write
+  pull-requests: read
+jobs:
+  update_release_draft:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: release-drafter/release-drafter@v6
+        with:
+          config-name: release-drafter.yml
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
