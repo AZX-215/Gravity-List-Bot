@@ -1,4 +1,4 @@
-﻿import os
+import os
 import sys
 import logging
 import discord
@@ -43,7 +43,9 @@ def _configure_logging() -> None:
 
     stream = logging.StreamHandler(sys.stdout)
     stream.setLevel(level)
-    stream.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
+    stream.setFormatter(
+        logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
+    )
     root.addHandler(stream)
 
     # Quiet discord.py gateway resume/connect chatter by default
@@ -132,7 +134,9 @@ def add_chunked_comment_field(embed: discord.Embed, comment_text: str) -> None:
     total = len(parts)
     for i, part in enumerate(parts, start=1):
         suffix = "" if i == 1 else f" (cont. {i}/{total})"
-        embed.add_field(name=f"{ZERO_WIDTH_SPACE}{suffix}", value=f"*{part}*", inline=False)
+        embed.add_field(
+            name=f"{ZERO_WIDTH_SPACE}{suffix}", value=f"*{part}*", inline=False
+        )
 
 
 CATEGORY_ORDER = ["Category", "Text", "Bullet"] + list(CATEGORY_EMOJIS.keys())
@@ -248,7 +252,10 @@ async def on_ready():
         return
 
     # --- Load debug_storage extension (optional; default enabled) ---
-    if os.getenv("ENABLE_DEBUG_STORAGE", "1") == "1" and "debug_storage" not in bot.extensions:
+    if (
+        os.getenv("ENABLE_DEBUG_STORAGE", "1") == "1"
+        and "debug_storage" not in bot.extensions
+    ):
         try:
             await bot.load_extension("debug_storage")
             print("[debug_storage] loaded")
@@ -313,7 +320,9 @@ async def create_list_cmd(interaction: discord.Interaction, name: str):
             f"âš ï¸ List '{name}' already exists.", ephemeral=True
         )
     save_list(name, [])
-    await interaction.response.send_message(f"âœ… Created list '{name}'.", ephemeral=True)
+    await interaction.response.send_message(
+        f"âœ… Created list '{name}'.", ephemeral=True
+    )
 
 
 @bot.tree.command(name="delete_list", description="Delete an existing list")
@@ -324,13 +333,19 @@ async def delete_list_cmd(interaction: discord.Interaction, name: str):
             f"âŒ No list named '{name}'.", ephemeral=True
         )
     delete_list(name)
-    await interaction.response.send_message(f"âœ… Deleted list '{name}'.", ephemeral=True)
+    await interaction.response.send_message(
+        f"âœ… Deleted list '{name}'.", ephemeral=True
+    )
 
 
 # â”â”â” Plain text entries â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
-@bot.tree.command(name="add_list_category", description="Add a category header to a list")
+@bot.tree.command(
+    name="add_list_category", description="Add a category header to a list"
+)
 @app_commands.describe(list_name="List to modify", title="Category title")
-async def add_list_category(interaction: discord.Interaction, list_name: str, title: str):
+async def add_list_category(
+    interaction: discord.Interaction, list_name: str, title: str
+):
     if not list_exists(list_name):
         return await interaction.response.send_message(
             f"âŒ No list named '{list_name}'.", ephemeral=True
@@ -346,7 +361,9 @@ async def add_list_category(interaction: discord.Interaction, list_name: str, ti
 
 @bot.tree.command(name="edit_list_category", description="Edit a category header")
 @app_commands.describe(
-    list_name="List to modify", index="Category position (1-based)", new_title="New category title"
+    list_name="List to modify",
+    index="Category position (1-based)",
+    new_title="New category title",
 )
 async def edit_list_category(
     interaction: discord.Interaction, list_name: str, index: int, new_title: str
@@ -369,9 +386,13 @@ async def edit_list_category(
     await update_list_dashboard(list_name)
 
 
-@bot.tree.command(name="remove_list_category", description="Remove a category header by index")
+@bot.tree.command(
+    name="remove_list_category", description="Remove a category header by index"
+)
 @app_commands.describe(list_name="List to modify", index="Category position (1-based)")
-async def remove_list_category(interaction: discord.Interaction, list_name: str, index: int):
+async def remove_list_category(
+    interaction: discord.Interaction, list_name: str, index: int
+):
     if not list_exists(list_name):
         return await interaction.response.send_message(
             f"âŒ No list named '{list_name}'.", ephemeral=True
@@ -411,7 +432,9 @@ async def add_text(interaction: discord.Interaction, list_name: str, text: str):
 @app_commands.describe(
     list_name="List to modify", index="Text line # (1-based)", new_text="New text"
 )
-async def edit_text(interaction: discord.Interaction, list_name: str, index: int, new_text: str):
+async def edit_text(
+    interaction: discord.Interaction, list_name: str, index: int, new_text: str
+):
     if not list_exists(list_name):
         return await interaction.response.send_message(
             f"âŒ No list named '{list_name}'.", ephemeral=True
@@ -419,10 +442,14 @@ async def edit_text(interaction: discord.Interaction, list_name: str, index: int
     data = load_list(list_name)
     txt_idxs = [i for i, x in enumerate(data) if x["category"] == "Text"]
     if index < 1 or index > len(txt_idxs):
-        return await interaction.response.send_message("âŒ Invalid text index.", ephemeral=True)
+        return await interaction.response.send_message(
+            "âŒ Invalid text index.", ephemeral=True
+        )
     data[txt_idxs[index - 1]]["name"] = new_text
     save_list(list_name, data)
-    await interaction.response.send_message(f"âœ… Updated text #{index}.", ephemeral=True)
+    await interaction.response.send_message(
+        f"âœ… Updated text #{index}.", ephemeral=True
+    )
     await update_list_dashboard(list_name)
 
 
@@ -436,7 +463,9 @@ async def remove_text(interaction: discord.Interaction, list_name: str, index: i
     data = load_list(list_name)
     txt_idxs = [i for i, x in enumerate(data) if x["category"] == "Text"]
     if index < 1 or index > len(txt_idxs):
-        return await interaction.response.send_message("âŒ Invalid text index.", ephemeral=True)
+        return await interaction.response.send_message(
+            "âŒ Invalid text index.", ephemeral=True
+        )
     removed = data.pop(txt_idxs[index - 1])
     save_list(list_name, data)
     await interaction.response.send_message(
@@ -464,7 +493,9 @@ async def add_bullet(interaction: discord.Interaction, list_name: str, bullet: s
 
 @bot.tree.command(name="edit_bullet", description="Edit a bullet entry")
 @app_commands.describe(
-    list_name="List to modify", index="Bullet # (1-based)", new_bullet="Updated bullet text"
+    list_name="List to modify",
+    index="Bullet # (1-based)",
+    new_bullet="Updated bullet text",
 )
 async def edit_bullet(
     interaction: discord.Interaction, list_name: str, index: int, new_bullet: str
@@ -476,10 +507,14 @@ async def edit_bullet(
     data = load_list(list_name)
     bul_idxs = [i for i, x in enumerate(data) if x["category"] == "Bullet"]
     if index < 1 or index > len(bul_idxs):
-        return await interaction.response.send_message("âŒ Invalid bullet index.", ephemeral=True)
+        return await interaction.response.send_message(
+            "âŒ Invalid bullet index.", ephemeral=True
+        )
     data[bul_idxs[index - 1]]["name"] = new_bullet
     save_list(list_name, data)
-    await interaction.response.send_message(f"âœ… Updated bullet #{index}.", ephemeral=True)
+    await interaction.response.send_message(
+        f"âœ… Updated bullet #{index}.", ephemeral=True
+    )
     await update_list_dashboard(list_name)
 
 
@@ -493,7 +528,9 @@ async def remove_bullet(interaction: discord.Interaction, list_name: str, index:
     data = load_list(list_name)
     bul_idxs = [i for i, x in enumerate(data) if x["category"] == "Bullet"]
     if index < 1 or index > len(bul_idxs):
-        return await interaction.response.send_message("âŒ Invalid bullet index.", ephemeral=True)
+        return await interaction.response.send_message(
+            "âŒ Invalid bullet index.", ephemeral=True
+        )
     removed = data.pop(bul_idxs[index - 1])
     save_list(list_name, data)
     await interaction.response.send_message(
@@ -538,7 +575,9 @@ async def add_name(
 
 @bot.tree.command(name="remove_name", description="Remove an entry")
 @app_commands.describe(list_name="List to modify", entry_name="Entry to remove")
-async def remove_name(interaction: discord.Interaction, list_name: str, entry_name: str):
+async def remove_name(
+    interaction: discord.Interaction, list_name: str, entry_name: str
+):
     if not list_exists(list_name):
         return await interaction.response.send_message(
             f"âŒ No list named '{list_name}'.", ephemeral=True
@@ -557,7 +596,9 @@ async def remove_name(interaction: discord.Interaction, list_name: str, entry_na
             )
             await update_list_dashboard(list_name)
             return
-    await interaction.response.send_message(f"âŒ Entry '{entry_name}' not found.", ephemeral=True)
+    await interaction.response.send_message(
+        f"âŒ Entry '{entry_name}' not found.", ephemeral=True
+    )
 
 
 @bot.tree.command(name="edit_name", description="Rename an entry & change category")
@@ -581,7 +622,11 @@ async def edit_name(
         )
     data = load_list(list_name)
     for it in data:
-        if it["name"] == old_name and it["category"] not in ("Category", "Text", "Bullet"):
+        if it["name"] == old_name and it["category"] not in (
+            "Category",
+            "Text",
+            "Bullet",
+        ):
             it["name"] = new_name
             it["category"] = category.value
             save_list(list_name, data)
@@ -591,12 +636,16 @@ async def edit_name(
             )
             await update_list_dashboard(list_name)
             return
-    await interaction.response.send_message(f"âŒ Entry '{old_name}' not found.", ephemeral=True)
+    await interaction.response.send_message(
+        f"âŒ Entry '{old_name}' not found.", ephemeral=True
+    )
 
 
 @bot.tree.command(name="move_name", description="Move an entry")
 @app_commands.describe(
-    list_name="List to modify", entry_name="Entry to move", position="New 1-based position"
+    list_name="List to modify",
+    entry_name="Entry to move",
+    position="New 1-based position",
 )
 async def move_name(
     interaction: discord.Interaction, list_name: str, entry_name: str, position: int
@@ -607,7 +656,11 @@ async def move_name(
         )
     data = load_list(list_name)
     for idx, it in enumerate(data):
-        if it["name"] == entry_name and it["category"] not in ("Category", "Text", "Bullet"):
+        if it["name"] == entry_name and it["category"] not in (
+            "Category",
+            "Text",
+            "Bullet",
+        ):
             entry = data.pop(idx)
             break
     else:
@@ -634,7 +687,9 @@ async def sort_list(interaction: discord.Interaction, list_name: str):
     categories = [it for it in data if it["category"] == "Category"]
     texts = [it for it in data if it["category"] == "Text"]
     bullets = [it for it in data if it["category"] == "Bullet"]
-    entries = [it for it in data if it["category"] not in ("Category", "Text", "Bullet")]
+    entries = [
+        it for it in data if it["category"] not in ("Category", "Text", "Bullet")
+    ]
     sorted_entries = []
     for cat in CATEGORY_EMOJIS.keys():
         grp = [it for it in entries if it["category"] == cat]
@@ -642,7 +697,9 @@ async def sort_list(interaction: discord.Interaction, list_name: str):
         sorted_entries.extend(grp)
     new_data = categories + texts + bullets + sorted_entries
     save_list(list_name, new_data)
-    await interaction.response.send_message(f"âœ… Sorted items in '{list_name}'.", ephemeral=True)
+    await interaction.response.send_message(
+        f"âœ… Sorted items in '{list_name}'.", ephemeral=True
+    )
     await update_list_dashboard(list_name)
 
 
@@ -661,7 +718,11 @@ async def add_comment(
         )
     data = load_list(list_name)
     for it in data:
-        if it["name"] == entry_name and it["category"] not in ("Category", "Text", "Bullet"):
+        if it["name"] == entry_name and it["category"] not in (
+            "Category",
+            "Text",
+            "Bullet",
+        ):
             it["comment"] = comment
             save_list(list_name, data)
             await interaction.response.send_message(
@@ -669,12 +730,16 @@ async def add_comment(
             )
             await update_list_dashboard(list_name)
             return
-    await interaction.response.send_message(f"âŒ Entry '{entry_name}' not found.", ephemeral=True)
+    await interaction.response.send_message(
+        f"âŒ Entry '{entry_name}' not found.", ephemeral=True
+    )
 
 
 @bot.tree.command(name="edit_comment", description="Edit a comment")
 @app_commands.describe(
-    list_name="List to modify", entry_name="Entry whose comment to edit", new_comment="Updated text"
+    list_name="List to modify",
+    entry_name="Entry whose comment to edit",
+    new_comment="Updated text",
 )
 async def edit_comment(
     interaction: discord.Interaction, list_name: str, entry_name: str, new_comment: str
@@ -693,12 +758,18 @@ async def edit_comment(
             )
             await update_list_dashboard(list_name)
             return
-    await interaction.response.send_message(f"âŒ No comment on '{entry_name}'.", ephemeral=True)
+    await interaction.response.send_message(
+        f"âŒ No comment on '{entry_name}'.", ephemeral=True
+    )
 
 
 @bot.tree.command(name="remove_comment", description="Remove a comment")
-@app_commands.describe(list_name="List to modify", entry_name="Entry whose comment to remove")
-async def remove_comment(interaction: discord.Interaction, list_name: str, entry_name: str):
+@app_commands.describe(
+    list_name="List to modify", entry_name="Entry whose comment to remove"
+)
+async def remove_comment(
+    interaction: discord.Interaction, list_name: str, entry_name: str
+):
     if not list_exists(list_name):
         return await interaction.response.send_message(
             f"âŒ No list named '{list_name}'.", ephemeral=True
@@ -713,11 +784,15 @@ async def remove_comment(interaction: discord.Interaction, list_name: str, entry
             )
             await update_list_dashboard(list_name)
             return
-    await interaction.response.send_message(f"âŒ Entry '{entry_name}' not found.", ephemeral=True)
+    await interaction.response.send_message(
+        f"âŒ Entry '{entry_name}' not found.", ephemeral=True
+    )
 
 
 # â”â”â” Assign to Category â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
-@bot.tree.command(name="assign_to_category", description="Move an entry under a specific category")
+@bot.tree.command(
+    name="assign_to_category", description="Move an entry under a specific category"
+)
 @app_commands.describe(
     list_name="List to modify",
     category_index="Category position (1-based)",
@@ -759,10 +834,14 @@ async def assign_to_category(
         pos_list = [i for i, v in enumerate(data) if v["category"] == "Bullet"]
     else:  # Name
         pos_list = [
-            i for i, v in enumerate(data) if v["category"] not in ("Category", "Text", "Bullet")
+            i
+            for i, v in enumerate(data)
+            if v["category"] not in ("Category", "Text", "Bullet")
         ]
     if entry_index < 1 or entry_index > len(pos_list):
-        return await interaction.response.send_message(f"âŒ Invalid {et} index.", ephemeral=True)
+        return await interaction.response.send_message(
+            f"âŒ Invalid {et} index.", ephemeral=True
+        )
     entry = data.pop(pos_list[entry_index - 1])
     # recompute category positions after removal
     new_cat_idxs = [i for i, v in enumerate(data) if v["category"] == "Category"]
@@ -770,7 +849,8 @@ async def assign_to_category(
     data.insert(insert_at, entry)
     save_list(list_name, data)
     await interaction.response.send_message(
-        f"âœ… Moved {et} #{entry_index} under category #{category_index}.", ephemeral=True
+        f"âœ… Moved {et} #{entry_index} under category #{category_index}.",
+        ephemeral=True,
     )
     await update_list_dashboard(list_name)
 
@@ -780,7 +860,9 @@ async def assign_to_category(
 async def view_lists_cmd(interaction: discord.Interaction):
     names = get_all_list_names()
     if not names:
-        return await interaction.response.send_message("âš ï¸ No lists found.", ephemeral=True)
+        return await interaction.response.send_message(
+            "âš ï¸ No lists found.", ephemeral=True
+        )
     await interaction.response.send_message(
         "ðŸ“‹ Lists:\n" + "\n".join(f"- `{n}`" for n in sorted(names)), ephemeral=True
     )
@@ -790,9 +872,12 @@ async def view_lists_cmd(interaction: discord.Interaction):
 async def view_gen_lists_cmd(interaction: discord.Interaction):
     names = get_all_gen_list_names()
     if not names:
-        return await interaction.response.send_message("âš ï¸ No gen lists found.", ephemeral=True)
+        return await interaction.response.send_message(
+            "âš ï¸ No gen lists found.", ephemeral=True
+        )
     await interaction.response.send_message(
-        "ðŸ“Š Gen lists:\n" + "\n".join(f"- `{n}`" for n in sorted(names)), ephemeral=True
+        "ðŸ“Š Gen lists:\n" + "\n".join(f"- `{n}`" for n in sorted(names)),
+        ephemeral=True,
     )
 
 
@@ -806,10 +891,14 @@ async def deploy_list_cmd(interaction: discord.Interaction, name: str):
         sent = await interaction.original_response()
         save_dashboard_id(name, sent.channel.id, sent.id)
     else:
-        await interaction.response.send_message(f"âŒ No list named '{name}'.", ephemeral=True)
+        await interaction.response.send_message(
+            f"âŒ No list named '{name}'.", ephemeral=True
+        )
 
 
-@bot.tree.command(name="deploy_gen_list", description="Deploy/update a generator dashboard")
+@bot.tree.command(
+    name="deploy_gen_list", description="Deploy/update a generator dashboard"
+)
 @app_commands.describe(name="Name of the generator list")
 async def deploy_gen_list_cmd(interaction: discord.Interaction, name: str):
     if gen_list_exists(name):
@@ -832,7 +921,9 @@ async def help_cmd(interaction: discord.Interaction):
         description="Clean dashboards for names, notes, timers, generators, and server status.",
         color=discord.Color.blurple(),
     )
-    embed.set_footer(text="All commands are slash commands. Use autocomplete where available.")
+    embed.set_footer(
+        text="All commands are slash commands. Use autocomplete where available."
+    )
 
     def add_section(title: str, lines: list[str]):
         """Add a section to the embed, splitting into multiple fields if >1024 chars."""
