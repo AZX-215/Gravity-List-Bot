@@ -14,6 +14,7 @@ from data_manager import (
     set_autoprune_channel,
 )
 
+
 # Auto-prune interval (minutes). Set AUTOPRUNE_INTERVAL_MINUTES on Railway to change cadence.
 def _get_autoprune_interval_minutes() -> float:
     """Return interval minutes (default 120). Clamped to [5, 1440]."""
@@ -70,7 +71,11 @@ def _guild_me(guild: discord.Guild, bot: commands.Bot):
 
 
 DELETE_DELAY_SECONDS = float(os.getenv("AUTOPRUNE_DELETE_DELAY_SECONDS", "1.10"))
-USE_BULK_DELETE = os.getenv("AUTOPRUNE_USE_BULK_DELETE", "1").strip().lower() not in {"0", "false", "no"}
+USE_BULK_DELETE = os.getenv("AUTOPRUNE_USE_BULK_DELETE", "1").strip().lower() not in {
+    "0",
+    "false",
+    "no",
+}
 BULK_SAFE_DAYS = float(os.getenv("AUTOPRUNE_BULK_SAFE_DAYS", "13.5"))  # keep under 14d hard limit
 BULK_DELAY_SECONDS = float(os.getenv("AUTOPRUNE_BULK_DELAY_SECONDS", "0.80"))
 
@@ -263,13 +268,21 @@ class AutoPruneCog(commands.Cog):
                     ch_id = int(ch_id_str)
                 except Exception:
                     if LOG_SKIPS:
-                        LOG.warning("[autoprune] invalid channel id in config: %r (guild=%s)", ch_id_str, guild.id)
+                        LOG.warning(
+                            "[autoprune] invalid channel id in config: %r (guild=%s)",
+                            ch_id_str,
+                            guild.id,
+                        )
                     continue
 
                 channel = await _resolve_channel(self.bot, ch_id)
                 if not isinstance(channel, discord.TextChannel):
                     if LOG_SKIPS:
-                        LOG.warning("[autoprune] channel not found or not text: %s (guild=%s)", ch_id, guild.id)
+                        LOG.warning(
+                            "[autoprune] channel not found or not text: %s (guild=%s)",
+                            ch_id,
+                            guild.id,
+                        )
                     continue
 
                 keep_last = int(cfg.get("keep_last", 10))
@@ -280,7 +293,11 @@ class AutoPruneCog(commands.Cog):
                 me = _guild_me(channel.guild, self.bot)
                 if me is None:
                     if LOG_SKIPS:
-                        LOG.warning("[autoprune] unable to resolve bot member (guild=%s channel=%s)", guild.id, channel.id)
+                        LOG.warning(
+                            "[autoprune] unable to resolve bot member (guild=%s channel=%s)",
+                            guild.id,
+                            channel.id,
+                        )
                     continue
 
                 perms = channel.permissions_for(me)
@@ -318,7 +335,9 @@ class AutoPruneCog(commands.Cog):
                                 include_pinned,
                             )
                 except Exception:
-                    LOG.exception("[autoprune] run failed (guild=%s channel=%s)", guild.id, channel.id)
+                    LOG.exception(
+                        "[autoprune] run failed (guild=%s channel=%s)", guild.id, channel.id
+                    )
                     continue
 
     @prune_loop.before_loop
@@ -376,7 +395,9 @@ class AutoPruneCog(commands.Cog):
         # Kick off the first run immediately (in the background) so enable takes effect right away.
         async def _kickoff_first_run():
             try:
-                deleted = await _prune_channel(channel, keep_last, include_pinned, max_deletes_per_run)
+                deleted = await _prune_channel(
+                    channel, keep_last, include_pinned, max_deletes_per_run
+                )
                 if deleted > 0:
                     LOG.info(
                         "[autoprune] kickoff deleted=%d (guild=%s channel=%s #%s)",
@@ -394,7 +415,11 @@ class AutoPruneCog(commands.Cog):
                             channel.name,
                         )
             except Exception:
-                LOG.exception("[autoprune] kickoff failed (guild=%s channel=%s)", interaction.guild_id, channel.id)
+                LOG.exception(
+                    "[autoprune] kickoff failed (guild=%s channel=%s)",
+                    interaction.guild_id,
+                    channel.id,
+                )
 
         asyncio.create_task(_kickoff_first_run())
 
@@ -410,9 +435,15 @@ class AutoPruneCog(commands.Cog):
     )
     @app_commands.describe(channel="Channel to stop pruning")
     @app_commands.checks.has_permissions(manage_messages=True)
-    async def autoprune_disable(self, interaction: discord.Interaction, channel: discord.TextChannel):
+    async def autoprune_disable(
+        self, interaction: discord.Interaction, channel: discord.TextChannel
+    ):
         ok = remove_autoprune_channel(interaction.guild_id, channel.id)
-        msg = f"Auto-prune disabled for {channel.mention}." if ok else f"No auto-prune job found for {channel.mention}."
+        msg = (
+            f"Auto-prune disabled for {channel.mention}."
+            if ok
+            else f"No auto-prune job found for {channel.mention}."
+        )
         await interaction.response.send_message(msg, ephemeral=True)
 
     @app_commands.command(
@@ -423,7 +454,9 @@ class AutoPruneCog(commands.Cog):
     async def autoprune_list(self, interaction: discord.Interaction):
         channels = get_autoprune_channels(interaction.guild_id)
         if not channels:
-            await interaction.response.send_message("No auto-prune channels configured.", ephemeral=True)
+            await interaction.response.send_message(
+                "No auto-prune channels configured.", ephemeral=True
+            )
             return
 
         lines = []
@@ -451,7 +484,9 @@ class AutoPruneCog(commands.Cog):
     )
     @app_commands.describe(channel="Channel to prune now")
     @app_commands.checks.has_permissions(manage_messages=True)
-    async def autoprune_run_now(self, interaction: discord.Interaction, channel: discord.TextChannel):
+    async def autoprune_run_now(
+        self, interaction: discord.Interaction, channel: discord.TextChannel
+    ):
         channels = get_autoprune_channels(interaction.guild_id)
         cfg = channels.get(str(channel.id))
         if not cfg:
@@ -500,7 +535,9 @@ class AutoPruneCog(commands.Cog):
                     channel.name,
                 )
 
-        await interaction.followup.send(f"Auto-prune complete for {channel.mention}. Deleted {deleted} message(s).")
+        await interaction.followup.send(
+            f"Auto-prune complete for {channel.mention}. Deleted {deleted} message(s)."
+        )
 
 
 async def setup(bot: commands.Bot):

@@ -16,7 +16,6 @@ except Exception:
     DEBUG_STATE = None
 
 
-
 class _DropNoisyLogsFilter(logging.Filter):
     """Reduce high-frequency, low-signal library logs."""
 
@@ -39,8 +38,17 @@ class _DropNoisyLogsFilter(logging.Filter):
 
         # Optional: suppress discord.py HTTP 429 rate-limit warnings from being posted to Discord.
         # (They still appear in stdout/Railway logs.)
-        suppress_rl = os.getenv("SUPPRESS_HTTP_RATELIMIT_WARNINGS", "1").strip().lower() not in {"0", "false", "no"}
-        if suppress_rl and name.startswith("discord.http") and "We are being rate limited" in msg and record.levelno == logging.WARNING:
+        suppress_rl = os.getenv("SUPPRESS_HTTP_RATELIMIT_WARNINGS", "1").strip().lower() not in {
+            "0",
+            "false",
+            "no",
+        }
+        if (
+            suppress_rl
+            and name.startswith("discord.http")
+            and "We are being rate limited" in msg
+            and record.levelno == logging.WARNING
+        ):
             return False
 
         return True
@@ -119,7 +127,9 @@ class DiscordLogHandler(logging.Handler):
                     now = time.time()
                     if now - self._last_error_print > 600:
                         self._last_error_print = now
-                        print(f"[logging] cannot access channel_id={self.channel_id} (fetch_channel failed)")
+                        print(
+                            f"[logging] cannot access channel_id={self.channel_id} (fetch_channel failed)"
+                        )
                     return
 
             # Take a batch of lines to send
@@ -212,7 +222,6 @@ def _format_app_command(interaction: discord.Interaction) -> str:
         return "/unknown"
 
 
-
 class LoggingCog(commands.Cog):
     """Cog to send INFO+ logs to a Discord channel and track key events, with gated disconnect alerts."""
 
@@ -240,7 +249,13 @@ class LoggingCog(commands.Cog):
             ch_level = getattr(logging, level_name, logging.WARNING)
             flush_sec = int(os.getenv("LOG_CHANNEL_FLUSH_SEC", "10") or "10")
             max_lines = int(os.getenv("LOG_CHANNEL_MAX_LINES", "200") or "200")
-            handler = DiscordLogHandler(bot, int(channel_id), level=ch_level, interval=flush_sec, max_lines_per_flush=max_lines)
+            handler = DiscordLogHandler(
+                bot,
+                int(channel_id),
+                level=ch_level,
+                interval=flush_sec,
+                max_lines_per_flush=max_lines,
+            )
             formatter = logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
             handler.setFormatter(formatter)
             root.addHandler(handler)
@@ -249,8 +264,6 @@ class LoggingCog(commands.Cog):
         else:
             self.handler = None
             self._log_channel_id = None
-
-
 
         # Optional: separate command-usage logging to a dedicated channel
         # This lets you keep LOG_CHANNEL_LEVEL at WARNING+ while still getting command usage at INFO.
@@ -265,8 +278,13 @@ class LoggingCog(commands.Cog):
         if cmd_ch_id:
             cmd_level_name = (os.getenv("COMMAND_LOG_CHANNEL_LEVEL", "INFO") or "INFO").upper()
             cmd_level = getattr(logging, cmd_level_name, logging.INFO)
-            cmd_flush_sec = int(os.getenv("COMMAND_LOG_FLUSH_SEC", os.getenv("LOG_CHANNEL_FLUSH_SEC", "10")) or "10")
-            cmd_max_lines = int(os.getenv("COMMAND_LOG_MAX_LINES", os.getenv("LOG_CHANNEL_MAX_LINES", "200")) or "200")
+            cmd_flush_sec = int(
+                os.getenv("COMMAND_LOG_FLUSH_SEC", os.getenv("LOG_CHANNEL_FLUSH_SEC", "10")) or "10"
+            )
+            cmd_max_lines = int(
+                os.getenv("COMMAND_LOG_MAX_LINES", os.getenv("LOG_CHANNEL_MAX_LINES", "200"))
+                or "200"
+            )
 
             cmd_handler = DiscordLogHandler(
                 bot,

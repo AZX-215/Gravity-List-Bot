@@ -25,7 +25,6 @@ from timers import TimerCog
 from gen_timers import setup_gen_timers, build_gen_timetable_embed
 from logging_cog import LoggingCog
 
-
 load_dotenv()
 
 
@@ -67,14 +66,14 @@ bot = commands.Bot(command_prefix=commands.when_mentioned, intents=intents)
 # Use explicit Unicode escapes here so category icons stay stable even if the file
 # gets edited on a system/editor with bad encoding defaults.
 CATEGORY_EMOJIS = {
-    "Owner": "\U0001F451",      # Crown
-    "Alpha": "\u2B50",          # Star
-    "Friend": "\U0001F7E2",     # Green circle
-    "Ally": "\U0001F535",       # Blue circle
-    "Beta": "\U0001F7E1",       # Yellow circle
-    "Beach Bob": "\U0001F476",  # Baby
-    "Enemy": "\U0001F534",      # Red circle
-    "Item": "\u26AB",           # Black circle
+    "Owner": "\U0001f451",  # Crown
+    "Alpha": "\u2b50",  # Star
+    "Friend": "\U0001f7e2",  # Green circle
+    "Ally": "\U0001f535",  # Blue circle
+    "Beta": "\U0001f7e1",  # Yellow circle
+    "Beach Bob": "\U0001f476",  # Baby
+    "Enemy": "\U0001f534",  # Red circle
+    "Item": "\u26ab",  # Black circle
 }
 
 NAMED_ENTRY_CATEGORY_CHOICES = [
@@ -82,24 +81,25 @@ NAMED_ENTRY_CATEGORY_CHOICES = [
     for category_name in CATEGORY_EMOJIS.keys()
 ]
 
-ZERO_WIDTH_SPACE = "\u200B"
+ZERO_WIDTH_SPACE = "\u200b"
 BULLET = "\u2022"
 RIGHT_ARROW = "\u2192"
 
 # Repair known mojibake sequences from older bot.py builds or bad source encodings.
 _MOJIBAKE_REPLACEMENTS = {
-    "ðŸ‘‘": "\U0001F451",
-    "ðŸŸ¢": "\U0001F7E2",
-    "ðŸ”µ": "\U0001F535",
-    "ðŸŸ¡": "\U0001F7E1",
-    "ðŸ”´": "\U0001F534",
-    "âš«": "\u26AB",
-    "â€‹": "\u200B",
+    "ðŸ‘‘": "\U0001f451",
+    "ðŸŸ¢": "\U0001f7e2",
+    "ðŸ”µ": "\U0001f535",
+    "ðŸŸ¡": "\U0001f7e1",
+    "ðŸ”´": "\U0001f534",
+    "âš«": "\u26ab",
+    "â€‹": "\u200b",
     "â€¢": "\u2022",
     "â†’": "\u2192",
-    "â­": "\u2B50",
-    "ðŸ‘¶": "\U0001F476",
+    "â­": "\u2b50",
+    "ðŸ‘¶": "\U0001f476",
 }
+
 
 def repair_mojibake(text: str) -> str:
     if not isinstance(text, str) or not text:
@@ -107,6 +107,7 @@ def repair_mojibake(text: str) -> str:
     for bad, good in _MOJIBAKE_REPLACEMENTS.items():
         text = text.replace(bad, good)
     return text
+
 
 # --- Embed safety helpers (avoid 1024-char field value limit) ---
 EMBED_FIELD_VALUE_MAX = 1024
@@ -199,22 +200,38 @@ def build_embed(list_name: str) -> discord.Embed:
         if cat == "Category":
             # Show the user-facing index for categories
             ord_cat = it.get("_ord_cat", 0)
-            embed.add_field(name=ZERO_WIDTH_SPACE, value=f"**{ord_cat}. {repair_mojibake(it['name'])}**", inline=False)
+            embed.add_field(
+                name=ZERO_WIDTH_SPACE,
+                value=f"**{ord_cat}. {repair_mojibake(it['name'])}**",
+                inline=False,
+            )
 
         elif cat == "Text":
             ord_text = it.get("_ord_text", 0)
             # Put the index in the field name so itâ€™s easy to reference
-            embed.add_field(name=f"{ord_text}. {repair_mojibake(it['name'])}", value=ZERO_WIDTH_SPACE, inline=False)
+            embed.add_field(
+                name=f"{ord_text}. {repair_mojibake(it['name'])}",
+                value=ZERO_WIDTH_SPACE,
+                inline=False,
+            )
 
         elif cat == "Bullet":
             ord_bul = it.get("_ord_bullet", 0)
-            embed.add_field(name=f"{ord_bul}. {BULLET} {repair_mojibake(it['name'])}", value=ZERO_WIDTH_SPACE, inline=False)
+            embed.add_field(
+                name=f"{ord_bul}. {BULLET} {repair_mojibake(it['name'])}",
+                value=ZERO_WIDTH_SPACE,
+                inline=False,
+            )
 
         else:
             # Named entries get an index that matches the /assign_to_category entry_index for "Name"
             ord_name = it.get("_ord_name", 0)
             prefix = repair_mojibake(CATEGORY_EMOJIS.get(cat, ""))
-            embed.add_field(name=f"{prefix}   {ord_name}. {repair_mojibake(it['name'])}", value=ZERO_WIDTH_SPACE, inline=False)
+            embed.add_field(
+                name=f"{prefix}   {ord_name}. {repair_mojibake(it['name'])}",
+                value=ZERO_WIDTH_SPACE,
+                inline=False,
+            )
 
             # Preserve your existing comment handling (chunking elsewhere)
             if it.get("comment"):
@@ -341,7 +358,9 @@ async def edit_list_category(
     data = load_list(list_name)
     idxs = [i for i, x in enumerate(data) if x["category"] == "Category"]
     if index < 1 or index > len(idxs):
-        return await interaction.response.send_message("âŒ Invalid category index.", ephemeral=True)
+        return await interaction.response.send_message(
+            "âŒ Invalid category index.", ephemeral=True
+        )
     data[idxs[index - 1]]["name"] = new_title
     save_list(list_name, data)
     await interaction.response.send_message(
@@ -360,7 +379,9 @@ async def remove_list_category(interaction: discord.Interaction, list_name: str,
     data = load_list(list_name)
     idxs = [i for i, x in enumerate(data) if x["category"] == "Category"]
     if index < 1 or index > len(idxs):
-        return await interaction.response.send_message("âŒ Invalid category index.", ephemeral=True)
+        return await interaction.response.send_message(
+            "âŒ Invalid category index.", ephemeral=True
+        )
     removed = data.pop(idxs[index - 1])
     save_list(list_name, data)
     await interaction.response.send_message(
@@ -728,7 +749,9 @@ async def assign_to_category(
             "âŒ No categories in this list.", ephemeral=True
         )
     if category_index < 1 or category_index > len(cat_idxs):
-        return await interaction.response.send_message("âŒ Invalid category index.", ephemeral=True)
+        return await interaction.response.send_message(
+            "âŒ Invalid category index.", ephemeral=True
+        )
     et = entry_type.value
     if et == "Text":
         pos_list = [i for i, v in enumerate(data) if v["category"] == "Text"]
