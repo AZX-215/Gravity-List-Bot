@@ -1,0 +1,57 @@
+name-template: 'v$RESOLVED_VERSION'
+tag-template: 'v$RESOLVED_VERSION'
+change-template: '- $TITLE (#$NUMBER) @$AUTHOR'
+no-changes-template: '- No user-facing changes in this release'
+template: |
+  ## Changes
+
+  $CHANGES
+
+categories:
+  - title: 'Features'
+    labels:
+      - feature
+      - enhancement
+  - title: 'Fixes'
+    labels:
+      - fix
+      - bug
+      - bugfix
+  - title: 'Maintenance'
+    labels:
+      - chore
+      - ci
+      - dependencies
+      - deps
+
+exclude-labels:
+  - skip-changelog
+
+version-resolver:
+  major:
+    labels:
+      - major
+  minor:
+    labels:
+      - feature
+      - enhancement
+  patch:
+    labels:
+      - fix
+      - bug
+      - bugfix
+      - chore
+      - ci
+      - dependencies
+      - deps
+  default: patch
+
+autolabeler:
+  - label: 'dependencies'
+    files:
+      - 'requirements*.txt'
+      - 'pyproject.toml'
+      - '.github/workflows/**'
+  - label: 'ci'
+    files:
+      - '.github/**'
