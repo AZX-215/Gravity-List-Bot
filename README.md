@@ -1,6 +1,6 @@
 # Gravity List Bot
 
-Slash-only Discord bot for Ark: Survival Ascended groups: smart lists, generator dashboards, timers, optional server status dashboards, and structured logging.
+Slash-command-only Discord bot designed to organize data and present it through customizable widget dashboards. Features include smart lists, generator dashboards, timers, optional server-status dashboards, and structured logging.
 
 <p align="center">
   <img alt="Discord" src="https://img.shields.io/badge/Discord.py-2.x-blue">
