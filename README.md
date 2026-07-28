@@ -4,8 +4,6 @@
 
 <h1 align="center">Gravity List Bot</h1>
 
-# Gravity List Bot
-
 Slash-command-only Discord bot designed to organize data and present it through customizable widget dashboards. Features include smart lists, generator dashboards, timers, optional server-status dashboards, and structured logging.
 
 <p align="center">
