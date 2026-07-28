@@ -16,7 +16,7 @@ Slash-command-only Discord bot designed to organize data and present it through 
 Structured lists with categories, named entries, bullets, and free-text sections. Deploy a list to a channel as a single rendered message/embed.
 
 ### ⛽ Generator dashboards
-Track Tek/Gas/Electrical generator burn time and deploy/update a live dashboard message.
+Track virtual generator burn time and deploy/update a live dashboard message.
 
 ### ⏱️ Timers
 Create, pause/resume, edit, and delete timers.
