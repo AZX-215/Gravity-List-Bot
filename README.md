@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="images/Gravity_List_rounded.png" alt="Gravity List Bot logo" width="300">
+  <img src="images/Gravity_List_rounded.png" alt="Gravity List Bot logo" width="600">
 </p>
 
 <h1 align="center">Gravity List Bot</h1>
