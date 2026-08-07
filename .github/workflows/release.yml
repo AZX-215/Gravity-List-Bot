@@ -23,7 +23,7 @@ jobs:
           fetch-depth: 0   # needed so the tag exists locally
 
       - name: Set up Python (for any light scripting if needed)
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.11"
 
