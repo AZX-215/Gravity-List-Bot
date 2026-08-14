@@ -12,6 +12,8 @@ Slash-command-only Discord bot designed to organize data and present it through 
   <img alt="Style"   src="https://img.shields.io/badge/Code-black%20%26%20ruff-brightgreen">
 </p>
 
+[![GitHub Stats](https://github-stats-extended.vercel.app/api/top-langs?username=AZX-215&langs_count=5&theme=onedark)](https://github-stats-extended.vercel.app/api/top-langs?username=AZX-215&langs_count=5&theme=onedark)
+
 ---
 
 ## What it does
